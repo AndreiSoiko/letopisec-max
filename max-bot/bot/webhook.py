@@ -1,0 +1,182 @@
+"""HTTP-сервер для уведомлений T-Bank — отдельный поток, не блокирует bot polling."""
+
+import asyncio
+import json
+import logging
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+from bot.services.tinkoff import verify_notification
+from bot.database import (
+    get_tinkoff_order, complete_tinkoff_order,
+    add_stars, create_subscription, get_star_balance, save_payment,
+)
+from bot.config import SUBSCRIPTION_MINUTES
+
+logger = logging.getLogger(__name__)
+
+# Ссылки на главный event loop и бота — устанавливаются при старте
+_loop: asyncio.AbstractEventLoop | None = None
+_bot = None
+
+
+def _run(coro):
+    """Выполнить корутину в главном event loop из стороннего потока."""
+    assert _loop is not None, "Webhook loop не инициализирован"
+    future = asyncio.run_coroutine_threadsafe(coro, _loop)
+    return future.result(timeout=30)
+
+
+async def _process_payment(data: dict) -> str:
+    """Обработать подтверждённый платёж. Возвращает 'OK' или текст ошибки."""
+    order_id = data.get("OrderId", "")
+    order = await get_tinkoff_order(order_id)
+    if not order:
+        logger.warning("T-Bank notify: заказ не найден: %s", order_id)
+        return "OK"
+
+    if order["status"] == "paid":
+        return "OK"
+
+    await complete_tinkoff_order(order_id)
+
+    user_id = order["user_id"]
+    payment_type = order["payment_type"]
+    amount_rub = order["amount_rub"]
+    payment_id = str(order.get("tinkoff_payment_id", ""))
+
+    try:
+        await save_payment(
+            user_id=user_id,
+            amount_stars=amount_rub,
+            telegram_charge_id=payment_id,
+            payload=order_id,
+        )
+    except Exception as exc:
+        logger.error("Ошибка сохранения payment: %s", exc)
+
+    if payment_type == "topup":
+        await add_stars(user_id, amount_rub)
+        balance = await get_star_balance(user_id)
+        await _bot.send_message(
+            chat_id=user_id,
+            text=f"✅ Баланс пополнен на {amount_rub} ₽\n💰 Текущий баланс: {balance} ₽",
+        )
+
+    elif payment_type == "subscription":
+        sub = await create_subscription(
+            user_id=user_id,
+            stars_paid=amount_rub,
+            telegram_charge_id=payment_id,
+            minutes_total=SUBSCRIPTION_MINUTES,
+        )
+        exp = sub["expires_at"].strftime("%d.%m.%Y")
+        hours = SUBSCRIPTION_MINUTES // 60
+        await _bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"✅ Подписка активирована!\n"
+                f"📅 Действует до {exp}\n"
+                f"⏱ {hours} часов распознавания\n"
+                f"🎯 Тезисы и протокол включены"
+            ),
+        )
+
+    return "OK"
+
+
+class _TinkoffHandler(BaseHTTPRequestHandler):
+
+    def do_POST(self):
+        if self.path != "/tinkoff/notify":
+            self._respond(404, "NOT FOUND")
+            return
+
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length)
+
+        try:
+            data = json.loads(body)
+        except Exception:
+            logger.warning("T-Bank notify: не удалось разобрать JSON")
+            self._respond(400, "BAD REQUEST")
+            return
+
+        logger.info(
+            "T-Bank notify: status=%s order=%s",
+            data.get("Status"), data.get("OrderId"),
+        )
+
+        if not verify_notification(data):
+            logger.warning("T-Bank notify: неверная подпись")
+            self._respond(400, "INVALID TOKEN")
+            return
+
+        if data.get("Status") != "CONFIRMED":
+            self._respond(200, "OK")
+            return
+
+        try:
+            _run(_process_payment(data))
+        except Exception as exc:
+            logger.error("Ошибка обработки платежа: %s", exc)
+
+        self._respond(200, "OK")
+
+    def _respond(self, code: int, text: str):
+        self.close_connection = True
+        self.send_response(code)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(text.encode())
+        self.wfile.flush()
+
+    def log_message(self, format, *args):
+        pass  # логирование через стандартный logger выше
+
+
+def start_webhook_thread(bot, loop: asyncio.AbstractEventLoop, port: int) -> threading.Thread:
+    """Запустить HTTP-сервер в отдельном daemon-потоке."""
+    global _loop, _bot
+    _loop = loop
+    _bot = bot
+
+    server = HTTPServer(("0.0.0.0", port), _TinkoffHandler)
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info("💳 T-Bank webhook запущен в отдельном потоке: http://0.0.0.0:%d/tinkoff/notify", port)
+    return thread
+
+
+# Для обратной совместимости (Docker / Linux — там aiohttp работало)
+def build_app(bot):
+    """Устаревший метод — оставлен для совместимости."""
+    from aiohttp import web
+
+    async def _handle(request: web.Request) -> web.Response:
+        try:
+            data = await request.json()
+        except Exception:
+            return web.Response(text="BAD REQUEST", status=400)
+
+        logger.info("T-Bank notify: status=%s order=%s", data.get("Status"), data.get("OrderId"))
+
+        if not verify_notification(data):
+            return web.Response(text="INVALID TOKEN", status=400)
+
+        if data.get("Status") != "CONFIRMED":
+            return web.Response(text="OK")
+
+        try:
+            await _process_payment(data)
+        except Exception as exc:
+            logger.error("Ошибка обработки платежа: %s", exc)
+
+        return web.Response(text="OK")
+
+    app = web.Application()
+    app["bot"] = bot
+    app.router.add_post("/tinkoff/notify", _handle)
+    return app

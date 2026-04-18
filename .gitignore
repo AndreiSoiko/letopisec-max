@@ -1,0 +1,41 @@
+# Секреты — никогда не коммитить
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Тесты и кэш
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# Временные файлы
+*.tmp
+*.log
+*.wav
+*.mp3
+*.mp4
+*.ogg
+*.m4a
