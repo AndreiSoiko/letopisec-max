@@ -147,6 +147,8 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                     urls.mp4_1080 or urls.mp4_720 or urls.mp4_480
                     or urls.mp4_360 or urls.mp4_240 or urls.mp4_144
                 )
+            if not file_url:
+                logger.warning("video urls object: %s", vars(urls) if urls else None)
         else:
             file_url = getattr(attachment.payload, "url", None)
 
@@ -154,6 +156,13 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
 
         if not attachment:
             await event.message.answer("❌ Не удалось получить файл.")
+            return
+
+        if not file_url:
+            await event.message.answer(
+                "❌ Не удалось получить ссылку на файл.\n"
+                "Попробуйте отправить файл как документ, а не как видео."
+            )
             return
 
         if file_size and file_size > MAX_FILE_SIZE_BYTES:
