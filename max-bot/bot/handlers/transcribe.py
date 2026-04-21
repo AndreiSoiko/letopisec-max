@@ -148,7 +148,20 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                     or urls.mp4_360 or urls.mp4_240 or urls.mp4_144
                 )
             if not file_url:
-                logger.warning("video urls object: %s", vars(urls) if urls else None)
+                try:
+                    att_dict = vars(attachment)
+                except Exception:
+                    att_dict = str(attachment)
+                try:
+                    urls_dict = vars(urls) if urls else None
+                except Exception:
+                    urls_dict = str(urls)
+                logger.warning("VIDEO attachment dump: %s", att_dict)
+                logger.warning("VIDEO urls dump: %s", urls_dict)
+                # попробовать получить url из payload как для обычных файлов
+                file_url = getattr(getattr(attachment, "payload", None), "url", None)
+                if file_url:
+                    logger.info("VIDEO: url найден в payload: %s", file_url)
         else:
             file_url = getattr(attachment.payload, "url", None)
 
