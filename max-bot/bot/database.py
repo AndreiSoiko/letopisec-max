@@ -75,6 +75,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS tinkoff_orders (
                 order_id TEXT PRIMARY KEY,
                 user_id BIGINT REFERENCES users(user_id),
+                chat_id BIGINT,
                 payment_type TEXT NOT NULL,
                 amount_rub INTEGER NOT NULL,
                 tinkoff_payment_id TEXT,
@@ -113,6 +114,14 @@ async def init_db():
         try:
             await conn.execute("""
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT
+            """)
+        except Exception:
+            pass
+
+        # Миграция: chat_id в tinkoff_orders для отправки сообщений после оплаты
+        try:
+            await conn.execute("""
+                ALTER TABLE tinkoff_orders ADD COLUMN IF NOT EXISTS chat_id BIGINT
             """)
         except Exception:
             pass
@@ -294,13 +303,13 @@ async def get_user_stats(user_id: int) -> dict:
 
 async def create_tinkoff_order(
     order_id: str, user_id: int, payment_type: str,
-    amount_rub: int, tinkoff_payment_id: str,
+    amount_rub: int, tinkoff_payment_id: str, chat_id: int = None,
 ):
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO tinkoff_orders (order_id, user_id, payment_type, amount_rub, tinkoff_payment_id)
-            VALUES ($1, $2, $3, $4, $5)
-        """, order_id, user_id, payment_type, amount_rub, tinkoff_payment_id)
+            INSERT INTO tinkoff_orders (order_id, user_id, chat_id, payment_type, amount_rub, tinkoff_payment_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        """, order_id, user_id, chat_id, payment_type, amount_rub, tinkoff_payment_id)
 
 
 async def get_tinkoff_order(order_id: str) -> Optional[dict]:

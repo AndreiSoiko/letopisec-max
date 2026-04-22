@@ -42,6 +42,7 @@ async def _process_payment(data: dict) -> str:
     await complete_tinkoff_order(order_id)
 
     user_id = order["user_id"]
+    chat_id = order.get("chat_id") or user_id
     payment_type = order["payment_type"]
     amount_rub = order["amount_rub"]
     payment_id = str(order.get("tinkoff_payment_id", ""))
@@ -60,7 +61,7 @@ async def _process_payment(data: dict) -> str:
         await add_stars(user_id, amount_rub)
         balance = await get_star_balance(user_id)
         await _bot.send_message(
-            chat_id=user_id,
+            chat_id=chat_id,
             text=f"✅ Баланс пополнен на {amount_rub} ₽\n💰 Текущий баланс: {balance} ₽",
             attachments=[_menu_kb()],
         )
@@ -75,7 +76,7 @@ async def _process_payment(data: dict) -> str:
         exp = sub["expires_at"].strftime("%d.%m.%Y")
         hours = SUBSCRIPTION_MINUTES // 60
         await _bot.send_message(
-            chat_id=user_id,
+            chat_id=chat_id,
             text=(
                 f"✅ Подписка активирована!\n"
                 f"📅 Действует до {exp}\n"

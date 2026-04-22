@@ -288,6 +288,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
         await create_tinkoff_order(
             order_id=order_id,
             user_id=user_id,
+            chat_id=chat_id,
             payment_type=payment_type,
             amount_rub=amount,
             tinkoff_payment_id=result["payment_id"],
