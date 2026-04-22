@@ -12,6 +12,7 @@ from bot.database import (
     add_stars, create_subscription, get_star_balance, save_payment,
 )
 from bot.config import SUBSCRIPTION_MINUTES
+from bot.handlers.payment import _menu_kb
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ async def _process_payment(data: dict) -> str:
         await _bot.send_message(
             chat_id=user_id,
             text=f"✅ Баланс пополнен на {amount_rub} ₽\n💰 Текущий баланс: {balance} ₽",
+            attachments=[_menu_kb()],
         )
 
     elif payment_type == "subscription":
@@ -80,6 +82,7 @@ async def _process_payment(data: dict) -> str:
                 f"⏱ {hours} часов распознавания\n"
                 f"🎯 Тезисы и протокол включены"
             ),
+            attachments=[_menu_kb()],
         )
 
     return "OK"
