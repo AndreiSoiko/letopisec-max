@@ -23,7 +23,11 @@ def _token(params: dict) -> str:
         k: v for k, v in data.items()
         if k != "Token" and not isinstance(v, (dict, list))
     }
-    joined = "".join(str(v) for _, v in sorted(filtered.items()))
+    def _val(v):
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        return str(v)
+    joined = "".join(_val(v) for _, v in sorted(filtered.items()))
     return hashlib.sha256(joined.encode()).hexdigest()
 
 
