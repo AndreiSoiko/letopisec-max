@@ -294,7 +294,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             tinkoff_payment_id=result["payment_id"],
         )
 
-        oferta_note = "Переходя по ссылке, вы принимаете условия оферты: https://statika3.ru/oferta"
+        oferta_note = "Переходя по ссылке на оплату, вы принимаете условия оферты: https://statika3.ru/oferta"
         if payment_type == "subscription":
             text = (
                 f"💎 Подписка — {SUBSCRIPTION_PRICE_RUB} ₽/мес\n"
