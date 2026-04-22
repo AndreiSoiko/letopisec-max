@@ -294,19 +294,22 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             tinkoff_payment_id=result["payment_id"],
         )
 
+        oferta_note = "Переходя по ссылке, вы принимаете условия оферты: https://statika3.ru/oferta"
         if payment_type == "subscription":
             text = (
                 f"💎 Подписка — {SUBSCRIPTION_PRICE_RUB} ₽/мес\n"
                 f"• {HOURS} часов распознавания\n"
                 f"• Тезисы и протокол — бесплатно\n\n"
                 f"Ссылка для оплаты:\n{result['payment_url']}\n\n"
-                f"После оплаты подписка активируется автоматически."
+                f"После оплаты подписка активируется автоматически.\n\n"
+                f"{oferta_note}"
             )
         else:
             text = (
                 f"💳 Счёт на {amount} ₽ создан!\n\n"
                 f"Ссылка для оплаты:\n{result['payment_url']}\n\n"
-                f"После оплаты баланс пополнится автоматически."
+                f"После оплаты баланс пополнится автоматически.\n\n"
+                f"{oferta_note}"
             )
 
         await bot.send_message(chat_id=chat_id, text=text)

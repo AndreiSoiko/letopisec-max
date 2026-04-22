@@ -58,6 +58,9 @@ TINKOFF_SUCCESS_URL = os.getenv("TINKOFF_SUCCESS_URL", "")
 TINKOFF_FAIL_URL = os.getenv("TINKOFF_FAIL_URL", "")
 WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "8080"))
 
+# ── Оферта ──
+OFERTA_DATE = os.getenv("OFERTA_DATE", "22 апреля 2026 г.")
+
 # Аудиоформаты
 SUPPORTED_AUDIO_FORMATS = {
     "mp3", "wav", "ogg", "oga", "flac", "m4a", "aac", "wma", "webm", "opus",

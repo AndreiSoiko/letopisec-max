@@ -3,16 +3,105 @@
 import asyncio
 import json
 import logging
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
 from bot.services.tinkoff import verify_notification
 from bot.database import (
     get_tinkoff_order, complete_tinkoff_order,
     add_stars, create_subscription, get_star_balance, save_payment,
 )
-from bot.config import SUBSCRIPTION_MINUTES
+from bot.config import (
+    SUBSCRIPTION_MINUTES, OFERTA_DATE,
+    FREE_TRIAL_MAX_MINUTES, SUBSCRIPTION_PRICE_RUB,
+    PRICE_PER_MINUTE_RUB, THESES_PRICE_RUB, PROTOCOL_PRICE_RUB,
+)
 from bot.handlers.payment import _menu_kb
+
+_OFERTA_TEMPLATE_PATH = Path(__file__).parent.parent / "oferta-max-bot.md"
+
+
+def _render_oferta_html() -> str:
+    """Читает markdown-шаблон оферты, подставляет значения из конфига, возвращает HTML."""
+    try:
+        md = _OFERTA_TEMPLATE_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return "<p>Файл оферты не найден.</p>"
+
+    subscription_hours = SUBSCRIPTION_MINUTES // 60
+    md = md.format(
+        OFERTA_DATE=OFERTA_DATE,
+        FREE_TRIAL_MAX_MINUTES=FREE_TRIAL_MAX_MINUTES,
+        SUBSCRIPTION_PRICE_RUB=SUBSCRIPTION_PRICE_RUB,
+        SUBSCRIPTION_HOURS=subscription_hours,
+        PRICE_PER_MINUTE_RUB=PRICE_PER_MINUTE_RUB,
+        THESES_PRICE_RUB=THESES_PRICE_RUB,
+        PROTOCOL_PRICE_RUB=PROTOCOL_PRICE_RUB,
+    )
+
+    # Конвертация markdown → HTML
+    import re
+    lines = md.split("\n")
+    html_lines = []
+    in_list = False
+    for line in lines:
+        if line.startswith("## "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f"<h2>{line[3:]}</h2>")
+        elif line.startswith("# "):
+            html_lines.append(f"<h1>{line[2:]}</h1>")
+        elif line.startswith("### "):
+            html_lines.append(f"<h3>{line[4:]}</h3>")
+        elif line.startswith("- "):
+            if not in_list:
+                html_lines.append("<ul>")
+                in_list = True
+            content = line[2:]
+            content = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", content)
+            html_lines.append(f"<li>{content}</li>")
+        elif line.strip() == "---":
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append("<hr>")
+        elif line.strip() == "":
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append("")
+        else:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            content = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", line)
+            content = re.sub(r"\[(.+?)\]\((.+?)\)", r'<a href="\2">\1</a>', content)
+            html_lines.append(f"<p>{content}</p>")
+    if in_list:
+        html_lines.append("</ul>")
+
+    body = "\n".join(html_lines)
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Публичная оферта — Летописец</title>
+<style>
+  body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.6; }}
+  h1 {{ font-size: 1.6em; }} h2 {{ font-size: 1.2em; margin-top: 2em; }} h3 {{ font-size: 1em; }}
+  hr {{ border: none; border-top: 1px solid #ddd; margin: 1.5em 0; }}
+  ul {{ padding-left: 1.5em; }} li {{ margin: 0.3em 0; }}
+  a {{ color: #0066cc; }}
+</style>
+</head>
+<body>
+{body}
+</body>
+</html>"""
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +179,18 @@ async def _process_payment(data: dict) -> str:
 
 
 class _TinkoffHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        if self.path == "/oferta":
+            html = _render_oferta_html()
+            body = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self._respond(404, "NOT FOUND")
 
     def do_POST(self):
         if self.path != "/tinkoff/notify":
