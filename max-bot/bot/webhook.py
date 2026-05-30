@@ -7,6 +7,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from socketserver import ThreadingMixIn
 
 from bot.services.tinkoff import verify_notification
 from bot.database import (
@@ -117,6 +118,14 @@ def _run(coro):
     return future.result(timeout=30)
 
 
+async def _process_payment_safe(data: dict) -> None:
+    """Обёртка для fire-and-forget: логирует исключения вместо их подъёма."""
+    try:
+        await _process_payment(data)
+    except Exception as exc:
+        logger.error("Ошибка обработки платежа: %s", exc, exc_info=True)
+
+
 async def _process_payment(data: dict) -> str:
     """Обработать подтверждённый платёж. Возвращает 'OK' или текст ошибки."""
     order_id = data.get("OrderId", "")
@@ -221,11 +230,9 @@ class _TinkoffHandler(BaseHTTPRequestHandler):
             self._respond(200, "OK")
             return
 
-        try:
-            _run(_process_payment(data))
-        except Exception as exc:
-            logger.error("Ошибка обработки платежа: %s", exc)
-
+        # Отвечаем T-Bank немедленно, платёж обрабатываем в фоне.
+        # Блокировка здесь приводила к зависанию при повторных попытках T-Bank.
+        asyncio.run_coroutine_threadsafe(_process_payment_safe(data), _loop)
         self._respond(200, "OK")
 
     def _respond(self, code: int, text: str):
@@ -241,13 +248,18 @@ class _TinkoffHandler(BaseHTTPRequestHandler):
         pass  # логирование через стандартный logger выше
 
 
+class _ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """HTTPServer с обработкой каждого запроса в отдельном потоке."""
+    daemon_threads = True
+
+
 def start_webhook_thread(bot, loop: asyncio.AbstractEventLoop, port: int) -> threading.Thread:
     """Запустить HTTP-сервер в отдельном daemon-потоке."""
     global _loop, _bot
     _loop = loop
     _bot = bot
 
-    server = HTTPServer(("0.0.0.0", port), _TinkoffHandler)
+    server = _ThreadedHTTPServer(("0.0.0.0", port), _TinkoffHandler)
 
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
