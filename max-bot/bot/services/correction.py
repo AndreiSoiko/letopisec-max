@@ -1,26 +1,21 @@
-"""Контекстная коррекция транскрибации через OpenRouter LLM."""
+"""Контекстная коррекция транскрибации через YandexGPT."""
 
 import asyncio
 import logging
 from typing import Optional, Callable
 
-from bot.config import OPENROUTER_API_KEY, OPENROUTER_MODEL, CORRECTION_SYSTEM_PROMPT
-from bot.utils.http import get_client
+from bot.config import YANDEX_API_KEY, CORRECTION_SYSTEM_PROMPT
+from bot.services.yandex_llm import yandex_llm
 
 logger = logging.getLogger(__name__)
 
-LLM_URL = "https://openrouter.ai/api/v1/chat/completions"
-
-# Разбиение текста на блоки для LLM
-MAX_BLOCK_CHARS = 10000
+MAX_BLOCK_CHARS = 20000
 OVERLAP_CHARS = 500
 
 
 def _split_text(text: str) -> list[str]:
-    """Разбить текст на блоки."""
     if len(text) <= MAX_BLOCK_CHARS:
         return [text]
-
     blocks = []
     start = 0
     while start < len(text):
@@ -37,10 +32,8 @@ def _split_text(text: str) -> list[str]:
 
 
 def _merge_blocks(blocks: list[str]) -> str:
-    """Склеить блоки, убрав дубликаты на стыках."""
     if len(blocks) <= 1:
         return blocks[0] if blocks else ""
-
     result = blocks[0]
     for block in blocks[1:]:
         best = 0
@@ -52,80 +45,36 @@ def _merge_blocks(blocks: list[str]) -> str:
     return result
 
 
-async def _call_llm(text: str) -> str:
-    """Один запрос к OpenRouter LLM."""
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://transcription-bot.local",
-        "X-Title": "Transcription Bot",
-    }
-
-    payload = {
-        "model": OPENROUTER_MODEL,
-        "messages": [
-            {"role": "system", "content": CORRECTION_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Исправь ошибки распознавания:\n\n{text}"},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 4096,
-    }
-
-    async with get_client(timeout=120) as client:
-        for attempt in range(3):
-            try:
-                response = await client.post(LLM_URL, headers=headers, json=payload)
-
-                if response.status_code == 429:
-                    wait = 2 ** (attempt + 1)
-                    logger.warning(f"OpenRouter rate limit, ожидание {wait}с...")
-                    await asyncio.sleep(wait)
-                    continue
-
-                if response.status_code != 200:
-                    logger.error(f"OpenRouter ошибка ({response.status_code}): {response.text[:200]}")
-                    raise Exception(f"OpenRouter ошибка ({response.status_code})")
-
-                result = response.json()
-                choices = result.get("choices", [])
-                if choices:
-                    return choices[0].get("message", {}).get("content", text)
-                return text
-
-            except Exception as e:
-                if attempt < 2 and "timeout" in str(e).lower():
-                    await asyncio.sleep(2 ** attempt)
-                    continue
-                raise
-
-    return text
-
-
 async def correct_transcription(
     raw_text: str,
     on_progress: Optional[Callable] = None,
 ) -> str:
-    """
-    Контекстная коррекция через OpenRouter.
-    Возвращает скорректированный текст.
-    """
     if not raw_text.strip():
         return raw_text
-
-    if not OPENROUTER_API_KEY:
-        logger.warning("OPENROUTER_API_KEY не задан, коррекция пропущена")
+    if not YANDEX_API_KEY:
+        logger.warning("YANDEX_API_KEY не задан, коррекция пропущена")
         return raw_text
 
     blocks = _split_text(raw_text)
     corrected = []
 
     for i, block in enumerate(blocks):
-        try:
-            result = await _call_llm(block)
-            corrected.append(result)
-        except Exception as e:
-            logger.error(f"Ошибка коррекции блока {i + 1}/{len(blocks)}: {e}")
-            corrected.append(block)
+        for attempt in range(3):
+            try:
+                result = await yandex_llm(
+                    system_prompt=CORRECTION_SYSTEM_PROMPT,
+                    user_text=f"Исправь ошибки распознавания:\n\n{block}",
+                    temperature=0.1,
+                    max_tokens=4096,
+                )
+                corrected.append(result)
+                break
+            except Exception as e:
+                if attempt < 2:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    logger.error(f"Ошибка коррекции блока {i + 1}/{len(blocks)}: {e}")
+                    corrected.append(block)
 
         if on_progress:
             try:

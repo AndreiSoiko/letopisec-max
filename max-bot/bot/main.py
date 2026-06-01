@@ -8,7 +8,7 @@ from maxapi import Bot, Dispatcher
 
 
 from bot.config import (
-    MAX_BOT_TOKEN, LOG_LEVEL, YANDEX_API_KEY, OPENROUTER_API_KEY, ADMIN_IDS,
+    MAX_BOT_TOKEN, LOG_LEVEL, YANDEX_API_KEY, ADMIN_IDS,
     TINKOFF_TERMINAL_KEY, WEBHOOK_PORT,
 )
 from bot.database import init_db, close_db
@@ -35,8 +35,6 @@ async def main():
         sys.exit(1)
     if not YANDEX_API_KEY:
         logger.warning("⚠️ YANDEX_API_KEY не задан")
-    if not OPENROUTER_API_KEY:
-        logger.warning("⚠️ OPENROUTER_API_KEY не задан")
 
     # PostgreSQL
     await init_db()
@@ -64,7 +62,7 @@ async def main():
 
     logger.info("🎙 MAX-бот транскрибации запущен!")
     logger.info(f"   STT: Yandex SpeechKit")
-    logger.info(f"   LLM: OpenRouter {'✅' if OPENROUTER_API_KEY else '❌'}")
+    logger.info(f"   LLM: YandexGPT-32k {'✅' if YANDEX_API_KEY else '❌'}")
     logger.info(f"   DB:  PostgreSQL ✅")
     logger.info(f"   💳  T-Bank эквайринг {'✅' if TINKOFF_TERMINAL_KEY else '❌'}")
     logger.info(f"   🎬  Видео: MP4, MKV, AVI, MOV, WebM ✅")

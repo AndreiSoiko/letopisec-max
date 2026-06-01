@@ -14,7 +14,7 @@ from maxapi.filters.filter import BaseFilter
 
 from bot.config import (
     ALL_SUPPORTED_FORMATS, SUPPORTED_VIDEO_FORMATS,
-    OPENROUTER_API_KEY, FREE_TRIAL_MAX_MINUTES,
+    YANDEX_API_KEY, FREE_TRIAL_MAX_MINUTES,
     SUBSCRIPTION_PRICE_RUB, PRICE_PER_MINUTE_RUB,
     THESES_PRICE_RUB, PROTOCOL_PRICE_RUB,
     MAX_FILE_SIZE_BYTES,
@@ -657,7 +657,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                 return
 
             # 5.5. Идентификация спикеров по именам (только при диаризации)
-            if with_protocol and use_async and OPENROUTER_API_KEY:
+            if with_protocol and use_async and YANDEX_API_KEY:
                 await send("🎤 Определяю имена участников...")
                 try:
                     speaker_mapping = await identify_speakers(full_text)
@@ -669,7 +669,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
 
             # 6. Коррекция (пропускается для протокола — LLM удаляет метки спикеров)
             correction_applied = False
-            if OPENROUTER_API_KEY and not with_protocol:
+            if YANDEX_API_KEY and not with_protocol:
                 await send("🧠 AI-коррекция...")
                 try:
                     full_text = await correct_transcription(full_text)
@@ -680,7 +680,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             # 7. Анализ
             analysis_text = ""
             analysis_label = ""
-            if OPENROUTER_API_KEY:
+            if YANDEX_API_KEY:
                 if with_theses:
                     await send("🎯 Тезисы...")
                     try:

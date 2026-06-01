@@ -1,15 +1,14 @@
-"""Идентификация спикеров по имени через OpenRouter LLM."""
+"""Идентификация спикеров по имени через YandexGPT."""
 
 import json
 import logging
 import re
 
-from bot.config import OPENROUTER_API_KEY, OPENROUTER_MODEL, SPEAKER_IDENTIFICATION_PROMPT
-from bot.utils.http import get_client
+from bot.config import YANDEX_API_KEY, SPEAKER_IDENTIFICATION_PROMPT
+from bot.services.yandex_llm import yandex_llm
 
 logger = logging.getLogger(__name__)
 
-LLM_URL = "https://openrouter.ai/api/v1/chat/completions"
 _MAX_TEXT_CHARS = 20_000
 
 
@@ -32,33 +31,18 @@ def _extract_json(raw: str) -> dict:
 
 async def identify_speakers(text: str) -> dict[str, str]:
     """Найти имена спикеров по самопредставлениям в тексте. Возвращает {speaker_id: name}."""
-    if not OPENROUTER_API_KEY:
+    if not YANDEX_API_KEY:
         return {}
     truncated = text[:_MAX_TEXT_CHARS]
     if len(text) > _MAX_TEXT_CHARS:
         truncated += "\n\n[... текст сокращён ...]"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://transcription-bot.local",
-        "X-Title": "Transcription Bot",
-    }
-    payload = {
-        "model": OPENROUTER_MODEL,
-        "messages": [
-            {"role": "system", "content": SPEAKER_IDENTIFICATION_PROMPT},
-            {"role": "user", "content": f"Найди самопредставления участников и верни JSON-маппинг.\n\n{truncated}"},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 300,
-    }
     try:
-        async with get_client(timeout=60) as client:
-            response = await client.post(LLM_URL, headers=headers, json=payload)
-        if response.status_code != 200:
-            logger.warning(f"Speaker identification HTTP {response.status_code}: {response.text[:200]}")
-            return {}
-        raw_content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        raw_content = await yandex_llm(
+            system_prompt=SPEAKER_IDENTIFICATION_PROMPT,
+            user_text=f"Найди самопредставления участников и верни JSON-маппинг.\n\n{truncated}",
+            temperature=0.1,
+            max_tokens=300,
+        )
         mapping = _extract_json(raw_content)
         if mapping:
             logger.info(f"Identified speakers: {mapping}")

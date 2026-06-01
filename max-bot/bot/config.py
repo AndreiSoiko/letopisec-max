@@ -26,9 +26,8 @@ YANDEX_S3_BUCKET = os.getenv("YANDEX_S3_BUCKET", "")
 YANDEX_S3_KEY_ID = os.getenv("YANDEX_S3_KEY_ID", "")
 YANDEX_S3_SECRET_KEY = os.getenv("YANDEX_S3_SECRET_KEY", "")
 
-# OpenRouter LLM
+# OpenRouter LLM (не используется — оставлено для обратной совместимости .env)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash")
 
 # Прокси
 PROXY_URL = os.getenv("PROXY_URL", "")
