@@ -144,6 +144,14 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
     async def test(event: MessageCreated):
         await event.message.answer('Тест')
 
+    @dp.message_created()
+    async def debug_all(event: MessageCreated):
+        body = event.message.body
+        text = getattr(body, "text", None)
+        atts = getattr(body, "attachments", None)
+        att_types = [getattr(a, "type", "?") for a in atts] if atts else []
+        logger.info(f"DEBUG msg: text={text!r:.80} attachments={att_types}")
+
     @dp.message_created(F.message.body.attachments)
     async def handle_media(event: MessageCreated):
         if not _has_media(event):
