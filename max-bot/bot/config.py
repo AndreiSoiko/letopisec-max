@@ -28,7 +28,7 @@ YANDEX_S3_SECRET_KEY = os.getenv("YANDEX_S3_SECRET_KEY", "")
 
 # OpenRouter LLM
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash")
 
 # Прокси
 PROXY_URL = os.getenv("PROXY_URL", "")
