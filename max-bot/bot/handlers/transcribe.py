@@ -41,6 +41,8 @@ from bot.services.protocol import extract_protocol
 from bot.services.custom import process_with_custom_prompt
 from bot.services.docx_builder import build_docx
 from bot.services.speakers import identify_speakers, apply_speaker_names
+from bot.services.youtube import extract_youtube_url, get_youtube_title, download_youtube_audio
+from bot.services.translation import translate_text, TRANSLATE_LANG_NAMES
 from bot.handlers.payment import _menu_kb
 
 logger = logging.getLogger(__name__)
@@ -57,13 +59,22 @@ LANG_NAMES = {
 _pending_files: dict[int, dict] = {}
 # Распознанный текст для повторной обработки без переотправки файла
 _processed_results: dict[int, dict] = {}
-# Пользователи, ожидающие ввода своего промта: {user_id: {"type": "initial"|"extra"}}
+# Пользователи, ожидающие ввода своего промта: {user_id: {"type": "initial"|"extra"|"yt"}}
 _waiting_custom_prompt: dict[int, dict] = {}
+# YouTube ссылки, ожидающие обработки
+_pending_youtube: dict[int, dict] = {}
 
 
 class _WaitingPromptFilter(BaseFilter):
     async def __call__(self, event) -> bool:
         return event.message.sender.user_id in _waiting_custom_prompt
+
+
+class _YoutubeUrlFilter(BaseFilter):
+    async def __call__(self, event) -> bool:
+        text = getattr(event.message.body, "text", "") or ""
+        user_id = event.message.sender.user_id
+        return bool(extract_youtube_url(text)) and user_id not in _waiting_custom_prompt
 
 
 def _has_media(event: MessageCreated) -> bool:
@@ -84,6 +95,35 @@ def _build_initial_ops_keyboard(lang: str) -> InlineKeyboardBuilder:
     kb.add(CallbackButton(text="✏️ Свой вариант", payload="op:custom"))
     kb.add(CallbackButton(text=f"🌐 Сменить язык ({label})", payload="op:back_lang"))
     kb.add(CallbackButton(text="❌ Отмена", payload="op:cancel"))
+    return kb
+
+
+def _build_youtube_ops_keyboard(lang: str) -> InlineKeyboardBuilder:
+    label = LANG_NAMES.get(lang, lang)
+    kb = InlineKeyboardBuilder()
+    kb.add(CallbackButton(text="📝 Распознавание", payload="yt:op:transcribe"))
+    kb.add(CallbackButton(text="🌐 Перевести", payload="yt:op:translate"))
+    kb.add(CallbackButton(text=f"📝+🎯 +Тезисы (+{THESES_PRICE_RUB} ₽)", payload="yt:op:theses"))
+    kb.add(CallbackButton(text=f"📝+📋 +Протокол (+{PROTOCOL_PRICE_RUB} ₽)", payload="yt:op:protocol"))
+    kb.add(CallbackButton(text="✏️ Свой вариант", payload="yt:op:custom"))
+    kb.add(CallbackButton(text=f"🎙 Язык видео: {label}", payload="yt:back_lang"))
+    kb.add(CallbackButton(text="❌ Отмена", payload="yt:cancel"))
+    return kb
+
+
+def _build_youtube_translang_keyboard() -> InlineKeyboardBuilder:
+    kb = InlineKeyboardBuilder()
+    kb.row(
+        CallbackButton(text="🇷🇺 Русский", payload="yt:translang:ru"),
+        CallbackButton(text="🇬🇧 English", payload="yt:translang:en"),
+    )
+    kb.row(
+        CallbackButton(text="🇩🇪 Deutsch", payload="yt:translang:de"),
+        CallbackButton(text="🇫🇷 Français", payload="yt:translang:fr"),
+    )
+    kb.add(CallbackButton(text="🇪🇸 Español", payload="yt:translang:es"))
+    kb.add(CallbackButton(text="◀️ Назад", payload="yt:back_ops"))
+    kb.add(CallbackButton(text="❌ Отмена", payload="yt:cancel"))
     return kb
 
 
@@ -334,6 +374,153 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             attachments=[_menu_kb()],
         )
 
+    # ── YouTube ──
+
+    @dp.message_created(F.message.body.text, _YoutubeUrlFilter())
+    async def handle_youtube_url(event: MessageCreated):
+        user_id = event.message.sender.user_id
+        text = event.message.body.text or ""
+        url = extract_youtube_url(text)
+        if not url:
+            return
+        username = event.message.sender.username or ""
+        await ensure_user(user_id, username, username)
+        chat_id = event.message.recipient.chat_id
+        await event.message.answer("🔍 Получаю информацию о видео...")
+        try:
+            title = await get_youtube_title(url)
+        except Exception:
+            title = "YouTube видео"
+        _pending_youtube[user_id] = {"url": url, "title": title, "language": "ru-RU", "chat_id": chat_id}
+        kb = InlineKeyboardBuilder()
+        kb.row(
+            CallbackButton(text="🇷🇺 Русский", payload="yt:lang:ru-RU"),
+            CallbackButton(text="🇬🇧 English", payload="yt:lang:en-US"),
+        )
+        kb.row(
+            CallbackButton(text="🇩🇪 Deutsch", payload="yt:lang:de-DE"),
+            CallbackButton(text="🇫🇷 Français", payload="yt:lang:fr-FR"),
+        )
+        kb.row(
+            CallbackButton(text="🇪🇸 Español", payload="yt:lang:es-ES"),
+            CallbackButton(text="🇹🇷 Türkçe", payload="yt:lang:tr-TR"),
+        )
+        kb.add(CallbackButton(text="❌ Отмена", payload="yt:cancel"))
+        await event.message.answer(
+            f"🎬 {title}\n\n🌐 Выберите язык аудио в видео:",
+            attachments=[kb.as_markup()],
+        )
+
+    @dp.message_callback(F.callback.payload.startswith("yt:lang:"))
+    async def cb_yt_language(event: MessageCallback):
+        lang = event.callback.payload.split(":")[-1]
+        user_id = event.callback.user.user_id
+        pending = _pending_youtube.get(user_id)
+        if not pending:
+            await event.answer("❌ Ссылка не найдена. Отправьте заново.")
+            return
+        pending["language"] = lang
+        label = LANG_NAMES.get(lang, lang)
+        kb = _build_youtube_ops_keyboard(lang)
+        await event.message.answer(
+            f"🎬 {pending['title']}\n🌐 Язык: {label}\n\nВыберите операцию:",
+            attachments=[kb.adjust(1).as_markup()],
+        )
+
+    @dp.message_callback(F.callback.payload == "yt:back_lang")
+    async def cb_yt_back_lang(event: MessageCallback):
+        user_id = event.callback.user.user_id
+        if not _pending_youtube.get(user_id):
+            await event.answer("❌ Ссылка не найдена. Отправьте заново.")
+            return
+        kb = InlineKeyboardBuilder()
+        kb.row(
+            CallbackButton(text="🇷🇺 Русский", payload="yt:lang:ru-RU"),
+            CallbackButton(text="🇬🇧 English", payload="yt:lang:en-US"),
+        )
+        kb.row(
+            CallbackButton(text="🇩🇪 Deutsch", payload="yt:lang:de-DE"),
+            CallbackButton(text="🇫🇷 Français", payload="yt:lang:fr-FR"),
+        )
+        kb.row(
+            CallbackButton(text="🇪🇸 Español", payload="yt:lang:es-ES"),
+            CallbackButton(text="🇹🇷 Türkçe", payload="yt:lang:tr-TR"),
+        )
+        kb.add(CallbackButton(text="❌ Отмена", payload="yt:cancel"))
+        await event.message.answer(
+            "🌐 Выберите язык аудио в видео:",
+            attachments=[kb.as_markup()],
+        )
+
+    @dp.message_callback(F.callback.payload.startswith("yt:op:"))
+    async def cb_yt_op(event: MessageCallback):
+        mode = event.callback.payload.split(":")[-1]
+        user_id = event.callback.user.user_id
+
+        if mode == "translate":
+            if not _pending_youtube.get(user_id):
+                await event.answer("❌ Ссылка не найдена.")
+                return
+            kb = _build_youtube_translang_keyboard()
+            await event.message.answer(
+                "🌐 Выберите язык перевода:",
+                attachments=[kb.adjust(2).as_markup()],
+            )
+            return
+
+        if mode == "custom":
+            pending = _pending_youtube.get(user_id)
+            if not pending:
+                await event.answer("❌ Ссылка не найдена.")
+                return
+            _waiting_custom_prompt[user_id] = {"type": "yt"}
+            await event.answer("✏️ Жду ваш промт...")
+            await bot.send_message(
+                chat_id=pending["chat_id"],
+                text="✏️ Напишите свой способ обработки результатов распознавания.\n\nНапример: «Составь краткое изложение видео»",
+            )
+            return
+
+        pending = _pending_youtube.pop(user_id, None)
+        if not pending:
+            await event.answer("❌ Ссылка не найдена.")
+            return
+        await event.answer("⏳ Начинаю обработку...")
+        await _process_youtube(user_id, pending, mode)
+
+    @dp.message_callback(F.callback.payload == "yt:back_ops")
+    async def cb_yt_back_ops(event: MessageCallback):
+        user_id = event.callback.user.user_id
+        pending = _pending_youtube.get(user_id)
+        if not pending:
+            await event.answer("❌ Ссылка не найдена.")
+            return
+        lang = pending.get("language", "ru-RU")
+        kb = _build_youtube_ops_keyboard(lang)
+        await event.message.answer(
+            f"🎬 {pending['title']}\nВыберите операцию:",
+            attachments=[kb.adjust(1).as_markup()],
+        )
+
+    @dp.message_callback(F.callback.payload.startswith("yt:translang:"))
+    async def cb_yt_translang(event: MessageCallback):
+        lang = event.callback.payload.split(":")[-1]
+        user_id = event.callback.user.user_id
+        pending = _pending_youtube.pop(user_id, None)
+        if not pending:
+            await event.answer("❌ Ссылка не найдена.")
+            return
+        pending["translate_to"] = lang
+        await event.answer("⏳ Начинаю обработку...")
+        await _process_youtube(user_id, pending, "translate")
+
+    @dp.message_callback(F.callback.payload == "yt:cancel")
+    async def cb_yt_cancel(event: MessageCallback):
+        user_id = event.callback.user.user_id
+        _pending_youtube.pop(user_id, None)
+        _waiting_custom_prompt.pop(user_id, None)
+        await event.message.answer("❌ Отменено.")
+
     # ── Приём пользовательского промта ──
 
     @dp.message_created(F.message.body.text, _WaitingPromptFilter())
@@ -359,8 +546,46 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                 return
             await event.message.answer("⏳ Обрабатываю...")
             await _extra_process(user_id, result, "custom", text)
+        elif state["type"] == "yt":
+            pending = _pending_youtube.pop(user_id, None)
+            if not pending:
+                await event.message.answer("❌ Данные не найдены. Отправьте ссылку заново.")
+                return
+            pending["custom_prompt"] = text
+            await event.message.answer("⏳ Начинаю обработку...")
+            await _process_youtube(user_id, pending, "custom")
 
     # ── Внутренние функции ──
+
+    async def _process_youtube(user_id: int, info: dict, mode: str):
+        """Скачать аудио с YouTube и запустить пайплайн транскрибации."""
+        url = info["url"]
+        title = info["title"]
+        chat_id = info["chat_id"]
+
+        async def send(text):
+            await bot.send_message(chat_id=chat_id, text=text)
+
+        try:
+            await send(f"📥 Загружаю аудио...\n🎬 {title}")
+            audio_base = get_temp_path(user_id, "yt_audio")
+            audio_path = await download_youtube_audio(url, audio_base)
+            file_info = {
+                "file_url": url,
+                "file_name": f"{title[:50]}.mp3",
+                "file_size": audio_path.stat().st_size,
+                "is_video": False,
+                "chat_id": chat_id,
+                "language": info.get("language", "ru-RU"),
+                "local_path": audio_path,
+                "translate_to": info.get("translate_to", ""),
+                "custom_prompt": info.get("custom_prompt", ""),
+            }
+            await _process_file(user_id, file_info, mode)
+        except Exception as e:
+            logger.exception(f"YouTube обработка: {e}")
+            await send(f"❌ Ошибка: {str(e)[:200]}")
+            cleanup_user_files(user_id)
 
     async def _start(event: MessageCallback, mode: str):
         user_id = event.callback.user.user_id
@@ -518,29 +743,35 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
         language = info.get("language", "ru-RU")
         chat_id = info["chat_id"]
         custom_prompt = info.get("custom_prompt", "")
+        translate_to = info.get("translate_to", "")
+        local_path = info.get("local_path")
         with_theses = mode == "theses"
         with_protocol = mode == "protocol"
         with_custom = mode == "custom"
+        with_translate = mode == "translate"
 
         async def send(text):
             await bot.send_message(chat_id=chat_id, text=text)
 
         speaker_mapping: dict = {}
         try:
-            await send(f"⏳ Загружаю файл: {file_name}...")
+            # 1. Скачивание / использование локального файла
+            if local_path:
+                input_path = local_path
+                logger.info(f"Использую локальный файл: {input_path}")
+            else:
+                await send(f"⏳ Загружаю файл: {file_name}...")
+                import httpx
+                input_path = get_temp_path(user_id, file_name)
+                async with httpx.AsyncClient(timeout=httpx.Timeout(600.0)) as client:
+                    resp = await client.get(file_url)
+                    resp.raise_for_status()
+                    with open(input_path, "wb") as f:
+                        f.write(resp.content)
 
-            # 1. Скачивание
-            import httpx
-            input_path = get_temp_path(user_id, file_name)
-            async with httpx.AsyncClient(timeout=httpx.Timeout(600.0)) as client:
-                resp = await client.get(file_url)
-                resp.raise_for_status()
-                with open(input_path, "wb") as f:
-                    f.write(resp.content)
-
-            if not input_path.exists() or input_path.stat().st_size == 0:
-                raise Exception("Файл не скачался или пустой")
-            logger.info(f"Скачано: {input_path} ({input_path.stat().st_size} байт)")
+                if not input_path.exists() or input_path.stat().st_size == 0:
+                    raise Exception("Файл не скачался или пустой")
+                logger.info(f"Скачано: {input_path} ({input_path.stat().st_size} байт)")
 
             # 2. Аудио
             if is_video:
@@ -702,12 +933,21 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                         analysis_label = "РЕЗУЛЬТАТ ОБРАБОТКИ"
                     except Exception as e:
                         logger.error(f"Пользовательский промт: {e}")
+                elif with_translate and translate_to:
+                    await send("🌐 Перевожу...")
+                    try:
+                        analysis_text = await translate_text(full_text, translate_to)
+                        lang_label = TRANSLATE_LANG_NAMES.get(translate_to, translate_to)
+                        analysis_label = f"ПЕРЕВОД НА {lang_label.upper()}"
+                    except Exception as e:
+                        logger.error(f"Перевод: {e}")
 
             # 8. DOCX
             await send("📄 Создание документа...")
             date_str = datetime.now().strftime("%Y-%m-%d")
             safe = "".join(c for c in Path(file_name).stem if c.isalnum() or c in "._- ")[:50]
-            docx_filename = f"Транскрибация_{safe}_{date_str}.docx"
+            docx_prefix = "Перевод" if with_translate else "Транскрибация"
+            docx_filename = f"{docx_prefix}_{safe}_{date_str}.docx"
             docx_path = get_temp_path(user_id, docx_filename)
 
             final_text = full_text
@@ -742,6 +982,9 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                 summary.append(f"🎤 Участники: {names}")
             if analysis_text and with_custom:
                 summary.append("✏️ Свой вариант: ✅")
+            if analysis_text and with_translate:
+                lang_label = TRANSLATE_LANG_NAMES.get(translate_to, translate_to)
+                summary.append(f"🌐 Перевод на {lang_label}: ✅")
             if cost > 0:
                 summary.append(f"💰 Списано: {cost} ₽")
             if is_trial:
