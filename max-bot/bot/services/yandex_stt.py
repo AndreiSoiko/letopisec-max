@@ -228,8 +228,25 @@ def _sec_to_ts(sec: int) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+def _get_start_sec(final: dict, alternatives: list) -> int:
+    """Получить время начала фразы в секундах из объекта final."""
+    # 1. Прямо в final
+    ms = final.get("startTimeMs")
+    # 2. В первом слове первой альтернативы
+    if ms is None:
+        words = alternatives[0].get("words", []) if alternatives else []
+        ms = words[0].get("startTimeMs") if words else None
+    try:
+        return int(ms) // 1000
+    except (ValueError, TypeError):
+        return 0
+
+
 def _parse_recognition_simple(items: list) -> str:
     """Извлечь текст с временными метками каждые 15 секунд."""
+    if items:
+        logger.info(f"getRecognition первый элемент (структура): {json.dumps(items[0])[:600]}")
+
     segments = []
     for item in items:
         result = item.get("result", item)
@@ -240,10 +257,7 @@ def _parse_recognition_simple(items: list) -> str:
         text = alternatives[0].get("text", "").strip()
         if not text:
             continue
-        try:
-            start_sec = int(final.get("startTimeMs", 0)) // 1000
-        except (ValueError, TypeError):
-            start_sec = 0
+        start_sec = _get_start_sec(final, alternatives)
         segments.append((start_sec, text))
 
     if not segments:
@@ -285,10 +299,7 @@ def _parse_recognition_diarized(items: list) -> str:
             or result.get("speakerTag")
             or final.get("channelTag", "0")
         )
-        try:
-            start_sec = int(final.get("startTimeMs", 0)) // 1000
-        except (ValueError, TypeError):
-            start_sec = 0
+        start_sec = _get_start_sec(final, alternatives)
         segments.append((str(speaker), text, start_sec))
 
     unique_speakers = {s for s, _, _ in segments}
