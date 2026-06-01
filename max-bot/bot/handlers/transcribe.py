@@ -90,6 +90,7 @@ def _build_initial_ops_keyboard(lang: str) -> InlineKeyboardBuilder:
 def _build_extra_ops_keyboard(extra_count: int) -> InlineKeyboardBuilder:
     remaining = MAX_EXTRA_PROCESSINGS - extra_count
     kb = InlineKeyboardBuilder()
+    kb.add(CallbackButton(text="📝 Распознавание", payload="extra:transcribe"))
     kb.add(CallbackButton(text="🎯 Тезисы", payload="extra:theses"))
     kb.add(CallbackButton(text="📋 Протокол", payload="extra:protocol"))
     kb.add(CallbackButton(text="✏️ Свой вариант", payload="extra:custom"))
@@ -294,6 +295,10 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
 
     # ── Дополнительная обработка (без переотправки файла) ──
 
+    @dp.message_callback(F.callback.payload == "extra:transcribe")
+    async def cb_extra_transcribe(event: MessageCallback):
+        await _start_extra(event, "transcribe")
+
     @dp.message_callback(F.callback.payload == "extra:theses")
     async def cb_extra_theses(event: MessageCallback):
         await _start_extra(event, "theses")
@@ -390,6 +395,49 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             analysis_text = ""
             analysis_label = ""
             label_short = ""
+
+            if mode == "transcribe":
+                await send("📄 Создание документа с транскрибацией...")
+                date_str = datetime.now().strftime("%Y-%m-%d")
+                safe = "".join(c for c in Path(file_name).stem if c.isalnum() or c in "._- ")[:50]
+                docx_path = get_temp_path(user_id, f"Транскрибация_{safe}_{date_str}.docx")
+                build_docx(
+                    text=full_text, output_path=docx_path,
+                    duration=duration_str, original_filename=file_name,
+                    correction_applied=correction_applied,
+                )
+                await send("✅ Транскрибация: готово!")
+                try:
+                    from maxapi.types.input_media import InputMedia
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text="📄 Документ:",
+                        attachments=[InputMedia(path=str(docx_path), type=UploadType.FILE)],
+                    )
+                except Exception as e:
+                    logger.error(f"Отправка файла: {e}")
+                    await send(f"⚠️ Не удалось отправить файл: {str(e)[:100]}")
+                docx_path.unlink(missing_ok=True)
+
+                result["extra_count"] += 1
+                extra_count = result["extra_count"]
+                if extra_count < MAX_EXTRA_PROCESSINGS:
+                    remaining = MAX_EXTRA_PROCESSINGS - extra_count
+                    kb = _build_extra_ops_keyboard(extra_count)
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=f"🔄 Хотите ещё раз обработать этот файл?\nОсталось попыток: {remaining} из {MAX_EXTRA_PROCESSINGS}",
+                        attachments=[kb.adjust(1).as_markup()],
+                    )
+                else:
+                    _processed_results.pop(user_id, None)
+                    await send(f"✅ Использовано все {MAX_EXTRA_PROCESSINGS} дополнительных обработок.")
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text="Для начала распознавания отправьте аудио или видео файл в чат",
+                        attachments=[_menu_kb()],
+                    )
+                return
 
             if mode == "theses":
                 await send("🎯 Извлекаю тезисы...")

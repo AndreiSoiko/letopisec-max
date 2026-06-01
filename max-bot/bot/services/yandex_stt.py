@@ -223,22 +223,13 @@ async def _fetch_recognition_result(operation_id: str, headers: dict) -> list:
     return items
 
 
+def _sec_to_ts(sec: int) -> str:
+    m, s = divmod(max(0, sec), 60)
+    return f"{m:02d}:{s:02d}"
+
+
 def _parse_recognition_simple(items: list) -> str:
-    """Извлечь текст из ответа getRecognition без диаризации."""
-    texts = []
-    for item in items:
-        result = item.get("result", item)  # некоторые форматы без обёртки "result"
-        final = result.get("final", {})
-        alternatives = final.get("alternatives", [])
-        if alternatives:
-            text = alternatives[0].get("text", "").strip()
-            if text:
-                texts.append(text)
-    return " ".join(texts)
-
-
-def _parse_recognition_diarized(items: list) -> str:
-    """Извлечь текст с метками говорящих из ответа getRecognition."""
+    """Извлечь текст с временными метками каждые 15 секунд."""
     segments = []
     for item in items:
         result = item.get("result", item)
@@ -249,16 +240,58 @@ def _parse_recognition_diarized(items: list) -> str:
         text = alternatives[0].get("text", "").strip()
         if not text:
             continue
-        # speakerTag может быть в alternatives[0] или в final или в result
+        try:
+            start_sec = int(final.get("startTimeMs", 0)) // 1000
+        except (ValueError, TypeError):
+            start_sec = 0
+        segments.append((start_sec, text))
+
+    if not segments:
+        return ""
+
+    paragraphs = []
+    group_start = segments[0][0]
+    group_parts: list[str] = []
+
+    for start_sec, text in segments:
+        if start_sec - group_start >= 15 and group_parts:
+            paragraphs.append(f"[{_sec_to_ts(group_start)}] " + " ".join(group_parts))
+            group_start = start_sec
+            group_parts = [text]
+        else:
+            group_parts.append(text)
+
+    if group_parts:
+        paragraphs.append(f"[{_sec_to_ts(group_start)}] " + " ".join(group_parts))
+
+    return "\n\n".join(paragraphs)
+
+
+def _parse_recognition_diarized(items: list) -> str:
+    """Извлечь текст с метками говорящих и временными метками."""
+    segments = []
+    for item in items:
+        result = item.get("result", item)
+        final = result.get("final", {})
+        alternatives = final.get("alternatives", [])
+        if not alternatives:
+            continue
+        text = alternatives[0].get("text", "").strip()
+        if not text:
+            continue
         speaker = (
             alternatives[0].get("speakerTag")
             or final.get("speakerTag")
             or result.get("speakerTag")
             or final.get("channelTag", "0")
         )
-        segments.append((str(speaker), text))
+        try:
+            start_sec = int(final.get("startTimeMs", 0)) // 1000
+        except (ValueError, TypeError):
+            start_sec = 0
+        segments.append((str(speaker), text, start_sec))
 
-    unique_speakers = {s for s, _ in segments}
+    unique_speakers = {s for s, _, _ in segments}
     logger.info(f"Диаризация: сегментов={len(segments)}, спикеров={unique_speakers}")
 
     if not segments:
@@ -267,18 +300,20 @@ def _parse_recognition_diarized(items: list) -> str:
     lines = []
     current_speaker = None
     current_parts: list[str] = []
+    current_start_sec = 0
 
-    for speaker, text in segments:
+    for speaker, text, start_sec in segments:
         if speaker != current_speaker:
             if current_parts and current_speaker is not None:
-                lines.append(f"Участник {current_speaker}: {' '.join(current_parts)}")
+                lines.append(f"[{_sec_to_ts(current_start_sec)}] Участник {current_speaker}: {' '.join(current_parts)}")
             current_speaker = speaker
             current_parts = [text]
+            current_start_sec = start_sec
         else:
             current_parts.append(text)
 
     if current_parts and current_speaker is not None:
-        lines.append(f"Участник {current_speaker}: {' '.join(current_parts)}")
+        lines.append(f"[{_sec_to_ts(current_start_sec)}] Участник {current_speaker}: {' '.join(current_parts)}")
 
     return "\n\n".join(lines)
 
