@@ -144,17 +144,14 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
     async def test(event: MessageCreated):
         await event.message.answer('Тест')
 
-    @dp.message_created()
-    async def debug_all(event: MessageCreated):
-        body = event.message.body
-        text = getattr(body, "text", None)
-        atts = getattr(body, "attachments", None)
-        att_types = [getattr(a, "type", "?") for a in atts] if atts else []
-        logger.info(f"DEBUG msg: text={text!r:.80} attachments={att_types}")
-
     @dp.message_created(F.message.body.attachments)
     async def handle_media(event: MessageCreated):
         if not _has_media(event):
+            # MAX добавляет 'share' вложение к ссылкам — проверяем на YouTube
+            text = getattr(event.message.body, "text", "") or ""
+            url = extract_youtube_url(text)
+            if url:
+                await _handle_youtube_link(event, url)
             return
 
         user_id = event.message.sender.user_id
@@ -386,38 +383,10 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
 
     @dp.message_created(F.message.body.text, _YoutubeUrlFilter())
     async def handle_youtube_url(event: MessageCreated):
-        user_id = event.message.sender.user_id
         text = event.message.body.text or ""
         url = extract_youtube_url(text)
-        if not url:
-            return
-        username = event.message.sender.username or ""
-        await ensure_user(user_id, username, username)
-        chat_id = event.message.recipient.chat_id
-        await event.message.answer("🔍 Получаю информацию о видео...")
-        try:
-            title = await get_youtube_title(url)
-        except Exception:
-            title = "YouTube видео"
-        _pending_youtube[user_id] = {"url": url, "title": title, "language": "ru-RU", "chat_id": chat_id}
-        kb = InlineKeyboardBuilder()
-        kb.row(
-            CallbackButton(text="🇷🇺 Русский", payload="yt:lang:ru-RU"),
-            CallbackButton(text="🇬🇧 English", payload="yt:lang:en-US"),
-        )
-        kb.row(
-            CallbackButton(text="🇩🇪 Deutsch", payload="yt:lang:de-DE"),
-            CallbackButton(text="🇫🇷 Français", payload="yt:lang:fr-FR"),
-        )
-        kb.row(
-            CallbackButton(text="🇪🇸 Español", payload="yt:lang:es-ES"),
-            CallbackButton(text="🇹🇷 Türkçe", payload="yt:lang:tr-TR"),
-        )
-        kb.add(CallbackButton(text="❌ Отмена", payload="yt:cancel"))
-        await event.message.answer(
-            f"🎬 {title}\n\n🌐 Выберите язык аудио в видео:",
-            attachments=[kb.as_markup()],
-        )
+        if url:
+            await _handle_youtube_link(event, url)
 
     @dp.message_callback(F.callback.payload.startswith("yt:lang:"))
     async def cb_yt_language(event: MessageCallback):
@@ -564,6 +533,39 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             await _process_youtube(user_id, pending, "custom")
 
     # ── Внутренние функции ──
+
+    async def _handle_youtube_link(event, url: str):
+        """Общая логика обработки YouTube-ссылки (вызывается из нескольких обработчиков)."""
+        user_id = event.message.sender.user_id
+        if user_id in _waiting_custom_prompt:
+            return
+        username = event.message.sender.username or ""
+        await ensure_user(user_id, username, username)
+        chat_id = event.message.recipient.chat_id
+        await event.message.answer("🔍 Получаю информацию о видео...")
+        try:
+            title = await get_youtube_title(url)
+        except Exception:
+            title = "YouTube видео"
+        _pending_youtube[user_id] = {"url": url, "title": title, "language": "ru-RU", "chat_id": chat_id}
+        kb = InlineKeyboardBuilder()
+        kb.row(
+            CallbackButton(text="🇷🇺 Русский", payload="yt:lang:ru-RU"),
+            CallbackButton(text="🇬🇧 English", payload="yt:lang:en-US"),
+        )
+        kb.row(
+            CallbackButton(text="🇩🇪 Deutsch", payload="yt:lang:de-DE"),
+            CallbackButton(text="🇫🇷 Français", payload="yt:lang:fr-FR"),
+        )
+        kb.row(
+            CallbackButton(text="🇪🇸 Español", payload="yt:lang:es-ES"),
+            CallbackButton(text="🇹🇷 Türkçe", payload="yt:lang:tr-TR"),
+        )
+        kb.add(CallbackButton(text="❌ Отмена", payload="yt:cancel"))
+        await event.message.answer(
+            f"🎬 {title}\n\n🌐 Выберите язык аудио в видео:",
+            attachments=[kb.as_markup()],
+        )
 
     async def _process_youtube(user_id: int, info: dict, mode: str):
         """Скачать аудио с YouTube и запустить пайплайн транскрибации."""
