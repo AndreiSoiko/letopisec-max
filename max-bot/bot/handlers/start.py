@@ -112,7 +112,7 @@ def register_start_handlers(dp: Dispatcher, bot: Bot):
             f"/menu /balance /subscribe /topup"
         )
 
-    @dp.message_created(Command("promofree"))
+    @dp.message_created(Command("freejune"))
     async def cmd_promofree(event: MessageCreated):
         user_id = event.message.sender.user_id
         username = event.message.sender.username or ""
