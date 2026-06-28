@@ -2,9 +2,13 @@
 
 import asyncio
 import logging
+import os
+import ssl
 import sys
 
+import aiohttp
 from maxapi import Bot, Dispatcher
+from maxapi.client.default import DefaultConnectionProperties
 
 
 from bot.config import (
@@ -14,6 +18,19 @@ from bot.config import (
 from bot.database import init_db, close_db
 from bot.utils.debug import set_admin_ids
 from bot.handlers import register_start_handlers, register_payment_handlers, register_transcribe_handlers, register_admin_handlers
+
+MAX_API_URL = "https://platform-api2.max.ru"
+# Путь к сертификату Минцифры (скачать: https://www.gosuslugi.ru/crt)
+MAX_SSL_CA_CERT = os.getenv("MAX_SSL_CA_CERT", "")
+
+
+def _build_connector() -> aiohttp.TCPConnector | None:
+    """Создаёт TCPConnector с сертификатом Минцифры, если файл задан."""
+    if not MAX_SSL_CA_CERT or not os.path.exists(MAX_SSL_CA_CERT):
+        return None
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.load_verify_locations(MAX_SSL_CA_CERT)
+    return aiohttp.TCPConnector(ssl=ssl_ctx)
 
 
 def setup_logging():
@@ -43,7 +60,10 @@ async def main():
     set_admin_ids(ADMIN_IDS)
 
     # MAX Bot
-    bot = Bot(token=MAX_BOT_TOKEN)
+    connector = _build_connector()
+    default_conn = DefaultConnectionProperties(connector=connector) if connector else DefaultConnectionProperties()
+    bot = Bot(token=MAX_BOT_TOKEN, default_connection=default_conn)
+    bot.set_api_url(MAX_API_URL)
     dp = Dispatcher()
 
     # Регистрация обработчиков

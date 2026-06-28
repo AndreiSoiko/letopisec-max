@@ -369,7 +369,7 @@ async def async_transcribe_file(
         body = {
             "uri": s3_uri,
             "recognitionModel": {
-                "model": "general",
+                "model": "general:rc",
                 "audioFormat": audio_format,
                 "languageRestriction": {
                     "restrictionType": "WHITELIST",

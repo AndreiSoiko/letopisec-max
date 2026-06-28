@@ -908,9 +908,9 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                 except Exception as e:
                     logger.error(f"Идентификация спикеров: {e}")
 
-            # 6. Коррекция (пропускается для протокола — LLM удаляет метки спикеров)
+            # 6. Коррекция (пропускается для протокола и перевода — LLM сам исправит ошибки при переводе)
             correction_applied = False
-            if YANDEX_API_KEY and not with_protocol:
+            if YANDEX_API_KEY and not with_protocol and not with_translate:
                 await send("🧠 AI-коррекция...")
                 try:
                     full_text = await correct_transcription(full_text)
