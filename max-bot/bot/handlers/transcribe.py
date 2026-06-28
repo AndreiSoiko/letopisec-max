@@ -41,7 +41,11 @@ from bot.services.protocol import extract_protocol
 from bot.services.custom import process_with_custom_prompt
 from bot.services.docx_builder import build_docx
 from bot.services.speakers import identify_speakers, apply_speaker_names
-from bot.services.youtube import extract_youtube_url, get_youtube_title, download_youtube_audio
+from bot.services.youtube import (
+    extract_youtube_url, extract_media_url,
+    get_youtube_title, get_media_title,
+    download_youtube_audio, download_audio_from_url,
+)
 from bot.services.translation import translate_text, TRANSLATE_LANG_NAMES
 from bot.handlers.payment import _menu_kb
 
@@ -70,11 +74,11 @@ class _WaitingPromptFilter(BaseFilter):
         return event.message.sender.user_id in _waiting_custom_prompt
 
 
-class _YoutubeUrlFilter(BaseFilter):
+class _MediaUrlFilter(BaseFilter):
     async def __call__(self, event) -> bool:
         text = getattr(event.message.body, "text", "") or ""
         user_id = event.message.sender.user_id
-        return bool(extract_youtube_url(text)) and user_id not in _waiting_custom_prompt
+        return bool(extract_media_url(text)) and user_id not in _waiting_custom_prompt
 
 
 def _has_media(event: MessageCreated) -> bool:
@@ -147,9 +151,9 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
     @dp.message_created(F.message.body.attachments)
     async def handle_media(event: MessageCreated):
         if not _has_media(event):
-            # MAX добавляет 'share' вложение к ссылкам — проверяем на YouTube
+            # MAX добавляет 'share' вложение к ссылкам — проверяем на медиа-URL
             text = getattr(event.message.body, "text", "") or ""
-            url = extract_youtube_url(text)
+            url = extract_media_url(text)
             if url:
                 await _handle_youtube_link(event, url)
             return
@@ -379,12 +383,12 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             attachments=[_menu_kb()],
         )
 
-    # ── YouTube ──
+    # ── Медиа по ссылке (YouTube, VK, Rutube, OK.ru, Vimeo, TikTok, прямые файлы...) ──
 
-    @dp.message_created(F.message.body.text, _YoutubeUrlFilter())
-    async def handle_youtube_url(event: MessageCreated):
+    @dp.message_created(F.message.body.text, _MediaUrlFilter())
+    async def handle_media_url(event: MessageCreated):
         text = event.message.body.text or ""
-        url = extract_youtube_url(text)
+        url = extract_media_url(text)
         if url:
             await _handle_youtube_link(event, url)
 
@@ -535,7 +539,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
     # ── Внутренние функции ──
 
     async def _handle_youtube_link(event, url: str):
-        """Общая логика обработки YouTube-ссылки (вызывается из нескольких обработчиков)."""
+        """Обработка медиа-ссылки (YouTube, VK, Rutube, OK.ru, Vimeo, прямые файлы и др.)."""
         user_id = event.message.sender.user_id
         if user_id in _waiting_custom_prompt:
             return
@@ -544,9 +548,9 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
         chat_id = event.message.recipient.chat_id
         await event.message.answer("🔍 Получаю информацию о видео...")
         try:
-            title = await get_youtube_title(url)
+            title = await get_media_title(url)
         except Exception:
-            title = "YouTube видео"
+            title = "Видео по ссылке"
         _pending_youtube[user_id] = {"url": url, "title": title, "language": "ru-RU", "chat_id": chat_id}
         kb = InlineKeyboardBuilder()
         kb.row(
@@ -568,7 +572,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
         )
 
     async def _process_youtube(user_id: int, info: dict, mode: str):
-        """Скачать аудио с YouTube и запустить пайплайн транскрибации."""
+        """Скачать аудио по ссылке и запустить пайплайн транскрибации."""
         url = info["url"]
         title = info["title"]
         chat_id = info["chat_id"]
@@ -579,7 +583,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
         try:
             await send(f"📥 Загружаю аудио...\n🎬 {title}")
             audio_base = get_temp_path(user_id, "yt_audio")
-            audio_path = await download_youtube_audio(url, audio_base)
+            audio_path = await download_audio_from_url(url, audio_base)
             file_info = {
                 "file_url": url,
                 "file_name": f"{title[:50]}.mp3",
@@ -593,8 +597,18 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             }
             await _process_file(user_id, file_info, mode)
         except Exception as e:
-            logger.exception(f"YouTube обработка: {e}")
-            await send(f"❌ Ошибка: {str(e)[:200]}")
+            logger.exception(f"Обработка ссылки: {e}")
+            err = str(e)
+            if "yt-dlp" in err or "Unsupported URL" in err or "Unable to extract" in err:
+                msg = (
+                    "❌ Не удалось скачать по ссылке.\n"
+                    "Возможно, сервис не поддерживается или видео недоступно.\n\n"
+                    "Поддерживаются: YouTube, VK Video, Rutube, OK.ru, Vimeo, TikTok, Twitch, "
+                    "Dailymotion, прямые ссылки на .mp3/.mp4 и другие форматы."
+                )
+            else:
+                msg = f"❌ Ошибка: {err[:200]}"
+            await send(msg)
             cleanup_user_files(user_id)
 
     async def _start(event: MessageCallback, mode: str):
