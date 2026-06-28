@@ -20,6 +20,7 @@ _MEDIA_URL_RE = re.compile(
     r'https?://(?:www\.|m\.)?(?:'
     r'(?:youtube\.com/(?:watch|shorts|live|embed)|youtu\.be/)[^\s]*|'
     r'vk\.com/video[^\s]*|'
+    r'(?:[a-z0-9-]+\.)*vkvideo\.ru/video[^\s]*|'
     r'rutube\.ru/video/[^\s]*|'
     r'ok\.ru/video[^\s]*|'
     r'dzen\.ru/video/[^\s]*|'

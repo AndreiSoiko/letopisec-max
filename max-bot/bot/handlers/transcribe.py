@@ -153,13 +153,15 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
         if not _has_media(event):
             # MAX добавляет 'share' вложение к ссылкам — проверяем на медиа-URL
             text = getattr(event.message.body, "text", "") or ""
-            atts = event.message.body.attachments or []
-            logger.warning(
-                "SHARE-ATT debug: text=%r, attachments=%s",
-                text,
-                [(getattr(a, "type", "?"), vars(a)) for a in atts],
-            )
             url = extract_media_url(text)
+            # Fallback: URL из payload share-вложения (если в тексте не нашли)
+            if not url:
+                for att in (event.message.body.attachments or []):
+                    if getattr(att, "type", "") == "share":
+                        payload_url = getattr(getattr(att, "payload", None), "url", None)
+                        if payload_url and extract_media_url(payload_url):
+                            url = payload_url
+                            break
             if url:
                 await _handle_youtube_link(event, url)
             return
