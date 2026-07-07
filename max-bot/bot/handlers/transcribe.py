@@ -592,11 +592,13 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             await send(f"📥 Загружаю аудио...\n🎬 {title}")
             audio_base = get_temp_path(user_id, "yt_audio")
             audio_path = await download_audio_from_url(url, audio_base)
+            ext = audio_path.suffix.lower().lstrip(".")
+            is_video = ext in SUPPORTED_VIDEO_FORMATS
             file_info = {
                 "file_url": url,
-                "file_name": f"{title[:50]}.mp3",
+                "file_name": f"{title[:50]}{audio_path.suffix or '.mp3'}",
                 "file_size": audio_path.stat().st_size,
-                "is_video": False,
+                "is_video": is_video,
                 "chat_id": chat_id,
                 "language": info.get("language", "ru-RU"),
                 "local_path": audio_path,
@@ -612,7 +614,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                     "❌ Не удалось скачать по ссылке.\n"
                     "Возможно, сервис не поддерживается или видео недоступно.\n\n"
                     "Поддерживаются: YouTube, VK Video, Rutube, OK.ru, Vimeo, TikTok, Twitch, "
-                    "Dailymotion, прямые ссылки на .mp3/.mp4 и другие форматы."
+                    "Dailymotion, Яндекс.Диск, прямые ссылки на .mp3/.mp4 и другие форматы."
                 )
             else:
                 msg = f"❌ Ошибка: {err[:200]}"
