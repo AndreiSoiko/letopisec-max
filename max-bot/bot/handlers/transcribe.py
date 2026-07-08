@@ -139,12 +139,28 @@ def _build_youtube_translang_keyboard() -> InlineKeyboardBuilder:
 
 
 def _build_extra_ops_keyboard(extra_count: int) -> InlineKeyboardBuilder:
-    remaining = MAX_EXTRA_PROCESSINGS - extra_count
     kb = InlineKeyboardBuilder()
     kb.add(CallbackButton(text="📝 Распознавание", payload="extra:transcribe"))
+    kb.add(CallbackButton(text="🌐 Перевести", payload="extra:translate"))
     kb.add(CallbackButton(text="🎯 Тезисы", payload="extra:theses"))
     kb.add(CallbackButton(text="📋 Протокол", payload="extra:protocol"))
     kb.add(CallbackButton(text="✏️ Свой вариант", payload="extra:custom"))
+    kb.add(CallbackButton(text="❌ Завершить", payload="extra:finish"))
+    return kb
+
+
+def _build_extra_translang_keyboard() -> InlineKeyboardBuilder:
+    kb = InlineKeyboardBuilder()
+    kb.row(
+        CallbackButton(text="🇷🇺 Русский", payload="extra:translang:ru"),
+        CallbackButton(text="🇬🇧 English", payload="extra:translang:en"),
+    )
+    kb.row(
+        CallbackButton(text="🇩🇪 Deutsch", payload="extra:translang:de"),
+        CallbackButton(text="🇫🇷 Français", payload="extra:translang:fr"),
+    )
+    kb.add(CallbackButton(text="🇪🇸 Español", payload="extra:translang:es"))
+    kb.add(CallbackButton(text="◀️ Назад", payload="extra:back_ops"))
     kb.add(CallbackButton(text="❌ Завершить", payload="extra:finish"))
     return kb
 
@@ -415,6 +431,42 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             attachments=[_menu_kb()],
         )
 
+    @dp.message_callback(F.callback.payload == "extra:translate")
+    async def cb_extra_translate(event: MessageCallback):
+        user_id = event.callback.user.user_id
+        if not _processed_results.get(user_id):
+            await event.answer("❌ Данные не найдены. Отправьте файл заново.")
+            return
+        kb = _build_extra_translang_keyboard()
+        await event.message.answer(
+            "🌐 Выберите язык перевода:",
+            attachments=[kb.adjust(2).as_markup()],
+        )
+
+    @dp.message_callback(F.callback.payload == "extra:back_ops")
+    async def cb_extra_back_ops(event: MessageCallback):
+        user_id = event.callback.user.user_id
+        result = _processed_results.get(user_id)
+        if not result:
+            await event.answer("❌ Данные не найдены. Отправьте файл заново.")
+            return
+        kb = _build_extra_ops_keyboard(result.get("extra_count", 0))
+        await event.message.answer(
+            "🔄 Выберите операцию:",
+            attachments=[kb.adjust(1).as_markup()],
+        )
+
+    @dp.message_callback(F.callback.payload.startswith("extra:translang:"))
+    async def cb_extra_translang(event: MessageCallback):
+        lang = event.callback.payload.split(":")[-1]
+        user_id = event.callback.user.user_id
+        result = _processed_results.get(user_id)
+        if not result:
+            await event.answer("❌ Данные не найдены. Отправьте файл заново.")
+            return
+        await event.answer("⏳ Переводю...")
+        await _extra_process(user_id, result, "translate", translate_to=lang)
+
     # ── Медиа по ссылке (VK, Rutube, OK.ru, Vimeo, TikTok, Яндекс.Диск, прямые файлы...) ──
 
     @dp.message_created(F.message.body.text, _YoutubeUrlFilter())
@@ -672,7 +724,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
         await event.answer("⏳ Обрабатываю...")
         await _extra_process(user_id, result, mode)
 
-    async def _extra_process(user_id: int, result: dict, mode: str, custom_prompt: str = ""):
+    async def _extra_process(user_id: int, result: dict, mode: str, custom_prompt: str = "", translate_to: str = ""):
         """Применить операцию к уже распознанному тексту без повторной транскрибации."""
         full_text = result["full_text"]
         file_name = result["file_name"]
@@ -746,6 +798,12 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                 analysis_text = await process_with_custom_prompt(full_text, custom_prompt)
                 analysis_label = "РЕЗУЛЬТАТ ОБРАБОТКИ"
                 label_short = "Свой_вариант"
+            elif mode == "translate" and translate_to:
+                await send("🌐 Перевожу...")
+                analysis_text = await translate_text(full_text, translate_to)
+                lang_label = TRANSLATE_LANG_NAMES.get(translate_to, translate_to)
+                analysis_label = f"ПЕРЕВОД НА {lang_label.upper()}"
+                label_short = "Перевод"
 
             if not analysis_text:
                 await send("⚠️ Не удалось выполнить обработку.")
