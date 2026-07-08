@@ -42,7 +42,7 @@ from bot.services.custom import process_with_custom_prompt
 from bot.services.docx_builder import build_docx
 from bot.services.speakers import identify_speakers, apply_speaker_names
 from bot.services.youtube import (
-    extract_youtube_url, extract_media_url,
+    extract_youtube_url, extract_media_url, is_youtube_url,
     get_youtube_title, get_media_title,
     download_youtube_audio, download_audio_from_url,
 )
@@ -79,6 +79,13 @@ class _MediaUrlFilter(BaseFilter):
         text = getattr(event.message.body, "text", "") or ""
         user_id = event.message.sender.user_id
         return bool(extract_media_url(text)) and user_id not in _waiting_custom_prompt
+
+
+class _YoutubeUrlFilter(BaseFilter):
+    async def __call__(self, event) -> bool:
+        text = getattr(event.message.body, "text", "") or ""
+        user_id = event.message.sender.user_id
+        return is_youtube_url(text) and user_id not in _waiting_custom_prompt
 
 
 def _has_media(event: MessageCreated) -> bool:
@@ -153,12 +160,29 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
         if not _has_media(event):
             # MAX добавляет 'share' вложение к ссылкам — проверяем на медиа-URL
             text = getattr(event.message.body, "text", "") or ""
+            # Сначала проверяем на YouTube — он не поддерживается
+            if is_youtube_url(text):
+                await event.message.answer(
+                    "⚠️ YouTube недоступен с нашего сервера — обработка ссылок YouTube не поддерживается.\n\n"
+                    "Вы можете скачать видео локально и отправить аудио/видео файл напрямую в чат.\n\n"
+                    "Поддерживаются ссылки: VK Video, Rutube, OK.ru, Vimeo, TikTok, Яндекс.Диск, "
+                    "а также прямые ссылки на .mp3, .mp4 и другие форматы."
+                )
+                return
             url = extract_media_url(text)
             # Fallback: URL из payload share-вложения (если в тексте не нашли)
             if not url:
                 for att in (event.message.body.attachments or []):
                     if getattr(att, "type", "") == "share":
                         payload_url = getattr(getattr(att, "payload", None), "url", None)
+                        if payload_url and is_youtube_url(payload_url):
+                            await event.message.answer(
+                                "⚠️ YouTube недоступен с нашего сервера — обработка ссылок YouTube не поддерживается.\n\n"
+                                "Вы можете скачать видео локально и отправить аудио/видео файл напрямую в чат.\n\n"
+                                "Поддерживаются ссылки: VK Video, Rutube, OK.ru, Vimeo, TikTok, Яндекс.Диск, "
+                                "а также прямые ссылки на .mp3, .mp4 и другие форматы."
+                            )
+                            return
                         if payload_url and extract_media_url(payload_url):
                             url = payload_url
                             break
@@ -391,7 +415,16 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             attachments=[_menu_kb()],
         )
 
-    # ── Медиа по ссылке (YouTube, VK, Rutube, OK.ru, Vimeo, TikTok, прямые файлы...) ──
+    # ── Медиа по ссылке (VK, Rutube, OK.ru, Vimeo, TikTok, Яндекс.Диск, прямые файлы...) ──
+
+    @dp.message_created(F.message.body.text, _YoutubeUrlFilter())
+    async def handle_youtube_url(event: MessageCreated):
+        await event.message.answer(
+            "⚠️ YouTube недоступен с нашего сервера — обработка ссылок YouTube не поддерживается.\n\n"
+            "Вы можете скачать видео локально и отправить аудио/видео файл напрямую в чат.\n\n"
+            "Поддерживаются ссылки: VK Video, Rutube, OK.ru, Vimeo, TikTok, Яндекс.Диск, "
+            "а также прямые ссылки на .mp3, .mp4 и другие форматы."
+        )
 
     @dp.message_created(F.message.body.text, _MediaUrlFilter())
     async def handle_media_url(event: MessageCreated):
@@ -613,7 +646,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                 msg = (
                     "❌ Не удалось скачать по ссылке.\n"
                     "Возможно, сервис не поддерживается или видео недоступно.\n\n"
-                    "Поддерживаются: YouTube, VK Video, Rutube, OK.ru, Vimeo, TikTok, Twitch, "
+                    "Поддерживаются: VK Video, Rutube, OK.ru, Vimeo, TikTok, Twitch, "
                     "Dailymotion, Яндекс.Диск, прямые ссылки на .mp3/.mp4 и другие форматы."
                 )
             else:

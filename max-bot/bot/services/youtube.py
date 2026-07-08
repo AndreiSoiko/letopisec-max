@@ -17,10 +17,16 @@ _YT_PATTERN = re.compile(
     r'https?://(?:www\.|m\.)?(?:youtube\.com/watch\?(?:[^\s]*&)*v=|youtu\.be/)([a-zA-Z0-9_-]{11})'
 )
 
+# Паттерн для YouTube-ссылок (обрабатываются отдельно — недоступны с РФ-серверов)
+_YOUTUBE_URL_RE = re.compile(
+    r'https?://(?:www\.|m\.)?(?:youtube\.com/(?:watch|shorts|live|embed)|youtu\.be/)[^\s]*',
+    re.IGNORECASE,
+)
+
 # Паттерн для медиа-ссылок: известные видеохостинги + прямые ссылки на аудио/видеофайлы
+# YouTube намеренно исключён — недоступен с серверов в РФ
 _MEDIA_URL_RE = re.compile(
     r'https?://(?:www\.|m\.)?(?:'
-    r'(?:youtube\.com/(?:watch|shorts|live|embed)|youtu\.be/)[^\s]*|'
     r'vk\.com/video[^\s]*|'
     r'(?:[a-z0-9-]+\.)*vkvideo\.ru/video[^\s]*|'
     r'rutube\.ru/video/[^\s]*|'
@@ -95,8 +101,13 @@ def extract_youtube_url(text: str) -> str | None:
     return None
 
 
+def is_youtube_url(text: str) -> bool:
+    """Проверяет, содержит ли текст ссылку на YouTube."""
+    return bool(_YOUTUBE_URL_RE.search(text))
+
+
 def extract_media_url(text: str) -> str | None:
-    """Извлекает URL медиаконтента (видеохостинги + прямые ссылки на файлы)."""
+    """Извлекает URL медиаконтента (видеохостинги + прямые ссылки на файлы). YouTube исключён."""
     m = _MEDIA_URL_RE.search(text)
     return m.group(0).rstrip(".,)\"'") if m else None
 
