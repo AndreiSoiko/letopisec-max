@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Главная — Летописец{% endblock %}
+
+{% block content %}
+<h4 class="mb-4">Добро пожаловать, {{ user.display_name }}!</h4>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="card p-3 text-center">
+      <div class="text-muted small">Баланс (звёзды)</div>
+      <div class="fs-3 fw-bold text-primary">{{ bot_user.star_balance|default:"—" }}</div>
+      <a href="/billing/" class="btn btn-sm btn-outline-primary mt-2">Пополнить</a>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card p-3 text-center">
+      <div class="text-muted small">Бесплатные минуты</div>
+      <div class="fs-3 fw-bold text-success">{{ bot_user.free_minutes|default:"0"|floatformat:1 }}</div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card p-3 text-center">
+      <div class="text-muted small">Подписка</div>
+      {% if subscription %}
+        <div class="fs-5 fw-bold text-info">до {{ subscription.expires_at|date:"d.m.Y" }}</div>
+        <div class="small text-muted">Осталось ~{{ sub_remaining }} мин</div>
+      {% else %}
+        <div class="fs-5 fw-bold text-secondary">Нет</div>
+        <a href="/billing/" class="btn btn-sm btn-outline-info mt-1">Оформить</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3">Последние задания</h6>
+      {% if recent_jobs %}
+      <ul class="list-unstyled mb-0">
+        {% for job in recent_jobs %}
+        <li class="d-flex justify-content-between align-items-center py-2 border-bottom">
+          <div>
+            <span class="small fw-bold">{{ job.mode }}</span>
+            <div class="text-muted x-small">{{ job.created_at|date:"d.m.Y H:i" }}</div>
+          </div>
+          <span class="badge bg-{{ job.status|yesno:'success,danger,secondary' }}">{{ job.status }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <a href="/jobs/" class="btn btn-sm btn-outline-secondary mt-2">Все задания</a>
+      {% else %}
+      <p class="text-muted mb-0">Заданий пока нет.</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3">Быстрый старт</h6>
+      <ol class="small">
+        <li class="mb-2">Получите <a href="/api-keys/">API-ключ</a></li>
+        <li class="mb-2">Отправьте ссылку на файл через API: <code>POST /api/v1/jobs</code></li>
+        <li class="mb-2">Опросите статус: <code>GET /api/v1/jobs/{id}</code></li>
+        <li>Скачайте Word-документ: <code>GET /api/v1/jobs/{id}/docx</code></li>
+      </ol>
+      <a href="/api/docs" target="_blank" class="btn btn-sm btn-outline-dark mt-1">Документация API →</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

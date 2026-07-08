@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Профиль — Летописец{% endblock %}
+
+{% block content %}
+<h4 class="mb-4">Профиль</h4>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card p-4">
+      <h6 class="fw-bold mb-3">Данные аккаунта</h6>
+      <p class="mb-1"><strong>Имя:</strong> {{ user.display_name }}</p>
+      <p class="mb-1"><strong>Email:</strong> {{ user.email }}</p>
+      <p class="mb-1"><strong>VK:</strong> {% if user.vk_id %}<span class="badge bg-primary">Привязан</span>{% else %}<a href="/accounts/vk/">Привязать</a>{% endif %}</p>
+      <p class="mb-3"><strong>Яндекс:</strong> {% if user.yandex_id %}<span class="badge bg-danger">Привязан</span>{% else %}<a href="/accounts/yandex/">Привязать</a>{% endif %}</p>
+      <a href="/accounts/change-password/" class="btn btn-outline-secondary btn-sm">Изменить пароль</a>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-4">
+      <h6 class="fw-bold mb-3">Привязка MAX</h6>
+      {% if user.is_max_linked %}
+        <p class="text-success">MAX аккаунт привязан</p>
+      {% else %}
+        <p class="text-muted">MAX аккаунт не привязан</p>
+      {% endif %}
+      <a href="/accounts/link-max/" class="btn btn-outline-primary btn-sm">Управление привязкой</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Привязать MAX — Летописец{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card p-4">
+      <h5 class="mb-3 fw-bold">Привязать аккаунт MAX</h5>
+      <p class="text-muted">Привязка позволяет использовать единый баланс между ботом в MAX и веб-сайтом.</p>
+
+      {% if user.is_max_linked %}
+      <div class="alert alert-success">MAX аккаунт привязан.</div>
+      <form method="post">
+        {% csrf_token %}
+        <button name="unlink" type="submit" class="btn btn-outline-danger btn-sm">Отвязать</button>
+      </form>
+      {% else %}
+        {% if code_valid %}
+        <div class="alert alert-info">
+          <strong>Ваш код:</strong> <code class="fs-5">{{ code }}</code><br>
+          <small>Отправьте боту в MAX: <code>/link {{ code }}</code><br>Код действителен до {{ expires|date:"H:i" }}</small>
+        </div>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <button name="generate" type="submit" class="btn btn-primary">
+            {% if code_valid %}Получить новый код{% else %}Получить код привязки{% endif %}
+          </button>
+        </form>
+        <hr>
+        <p class="small text-muted">
+          Найдите бота <strong>Летописец</strong> в MAX и отправьте команду <code>/link ВАШ_КОД</code>.
+          После этого страница обновится автоматически при следующем входе.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

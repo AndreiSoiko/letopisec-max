@@ -11,7 +11,7 @@ from bot.config import (
     FREE_TRIAL_MAX_MINUTES, SUBSCRIPTION_PRICE_RUB, SUBSCRIPTION_MINUTES,
     PRICE_PER_MINUTE_RUB, THESES_PRICE_RUB, PROTOCOL_PRICE_RUB, API_PORT,
 )
-from bot.database import ensure_user, add_free_minutes, create_api_key
+from bot.database import ensure_user, add_free_minutes, create_api_key, link_max_account
 
 logger = logging.getLogger(__name__)
 HOURS = SUBSCRIPTION_MINUTES // 60
@@ -169,3 +169,31 @@ def register_start_handlers(dp: Dispatcher, bot: Bot):
             await event.message.answer(f"✅ Ключ #{parts[1]} отозван.")
         else:
             await event.message.answer("❌ Ключ не найден или уже отозван.")
+
+    @dp.message_created(Command("link"))
+    async def cmd_link(event: MessageCreated):
+        user_id = event.message.sender.user_id
+        username = event.message.sender.username or ""
+        await ensure_user(user_id, username, username)
+
+        text = event.message.body.text or ""
+        parts = text.strip().split()
+        if len(parts) < 2:
+            await event.message.answer(
+                "Использование: /link КОД\n\n"
+                "Получить код можно на сайте летописца в разделе «Привязать MAX»."
+            )
+            return
+
+        code = parts[1].strip()
+        ok = await link_max_account(code, user_id)
+        if ok:
+            await event.message.answer(
+                "✅ Аккаунт MAX успешно привязан к вашему профилю на сайте!\n"
+                "Теперь баланс синхронизирован между ботом и сайтом."
+            )
+        else:
+            await event.message.answer(
+                "❌ Код не найден или срок его действия истёк.\n"
+                "Сгенерируйте новый код на сайте и попробуйте снова."
+            )

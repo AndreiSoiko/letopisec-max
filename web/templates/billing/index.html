@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Баланс — Летописец{% endblock %}
+
+{% block content %}
+<h4 class="mb-4">Баланс и оплата</h4>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="card p-3 text-center">
+      <div class="text-muted small">Баланс (₽)</div>
+      <div class="fs-3 fw-bold text-primary">{{ bot_user.star_balance|default:"0" }}</div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card p-3 text-center">
+      <div class="text-muted small">Бесплатные минуты</div>
+      <div class="fs-3 fw-bold text-success">{{ bot_user.free_minutes|default:"0"|floatformat:1 }}</div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card p-3 text-center">
+      <div class="text-muted small">Подписка</div>
+      {% if subscription %}
+        <div class="fw-bold text-info">до {{ subscription.expires_at|date:"d.m.Y" }}</div>
+      {% else %}
+        <div class="text-secondary">Нет</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card p-4 mb-4">
+  <h6 class="fw-bold mb-3">Пополнить баланс</h6>
+  <form method="post" action="/billing/topup/">
+    {% csrf_token %}
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      {% for amount in topup_amounts %}
+      <button type="submit" name="amount" value="{{ amount }}" class="btn btn-outline-primary">{{ amount }} ₽</button>
+      {% endfor %}
+    </div>
+    <div class="input-group" style="max-width:260px">
+      <input type="number" name="amount" class="form-control" placeholder="Другая сумма (₽)" min="50" max="50000">
+      <button type="submit" class="btn btn-primary">Оплатить</button>
+    </div>
+    <div class="text-muted small mt-2">Минимум 50 ₽ · Оплата через T-Bank (Tinkoff Pay)</div>
+  </form>
+</div>
+
+{% if recent_orders %}
+<div class="card p-4">
+  <h6 class="fw-bold mb-3">История платежей</h6>
+  <table class="table table-sm">
+    <thead><tr><th>Дата</th><th>Сумма</th><th>Статус</th></tr></thead>
+    <tbody>
+      {% for order in recent_orders %}
+      <tr>
+        <td>{{ order.created_at|date:"d.m.Y H:i" }}</td>
+        <td>{{ order.amount_rub }} ₽</td>
+        <td>
+          {% if order.status == "paid" %}<span class="badge bg-success">Оплачен</span>
+          {% elif order.status == "pending" %}<span class="badge bg-secondary">Ожидание</span>
+          {% else %}<span class="badge bg-danger">{{ order.status }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

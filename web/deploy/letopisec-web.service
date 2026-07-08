@@ -1,0 +1,21 @@
+[Unit]
+Description=Letopisec Web (Gunicorn)
+After=network.target postgresql.service
+
+[Service]
+User=letopisec-max
+Group=letopisec-max
+WorkingDirectory=/home/letopisec-max/web
+EnvironmentFile=/home/letopisec-max/web/.env
+ExecStart=/home/letopisec-max/web-venv/bin/gunicorn \
+    --workers 3 \
+    --bind 127.0.0.1:8080 \
+    --timeout 120 \
+    --access-logfile /var/log/letopisec-web/access.log \
+    --error-logfile /var/log/letopisec-web/error.log \
+    letopisec_web.wsgi:application
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

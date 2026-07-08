@@ -1,0 +1,40 @@
+{% extends "base_auth.html" %}
+{% block title %}Регистрация — Летописец{% endblock %}
+
+{% block auth_content %}
+<h4 class="mb-4 fw-bold">Создать аккаунт</h4>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label">Имя</label>
+    <input type="text" name="display_name" class="form-control" required
+           value="{{ form.display_name.value|default:'' }}">
+    {% if form.display_name.errors %}<div class="text-danger small">{{ form.display_name.errors.0 }}</div>{% endif %}
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Email</label>
+    <input type="email" name="email" class="form-control" required
+           value="{{ form.email.value|default:'' }}">
+    {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors.0 }}</div>{% endif %}
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Пароль</label>
+    <input type="password" name="password1" class="form-control" required>
+    {% if form.password1.errors %}<div class="text-danger small">{{ form.password1.errors.0 }}</div>{% endif %}
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Повторите пароль</label>
+    <input type="password" name="password2" class="form-control" required>
+    {% if form.password2.errors %}<div class="text-danger small">{{ form.password2.errors.0 }}</div>{% endif %}
+  </div>
+  <button type="submit" class="btn btn-primary w-100 mb-3">Зарегистрироваться</button>
+</form>
+
+<div class="d-grid gap-2">
+  <a href="/accounts/vk/" class="btn btn-outline-primary btn-sm">Войти через VK</a>
+  <a href="/accounts/yandex/" class="btn btn-outline-danger btn-sm">Войти через Яндекс</a>
+</div>
+<hr>
+<p class="text-center mb-0">Уже есть аккаунт? <a href="/accounts/login/">Войти</a></p>
+{% endblock %}

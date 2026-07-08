@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}API-ключи — Летописец{% endblock %}
+
+{% block content %}
+<h4 class="mb-4">API-ключи</h4>
+
+{% if request.session.new_api_key %}
+<div class="alert alert-warning">
+  <strong>Сохраните ключ — он показывается только один раз!</strong><br>
+  <code class="user-select-all fs-6">{{ request.session.new_api_key }}</code>
+</div>
+{% endif %}
+
+<div class="card p-4 mb-4">
+  <h6 class="fw-bold mb-3">Создать новый ключ</h6>
+  <form method="post" action="/api-keys/create/">
+    {% csrf_token %}
+    <div class="input-group" style="max-width: 400px">
+      <input type="text" name="name" class="form-control" placeholder="Название ключа (необязательно)" maxlength="100">
+      <button type="submit" class="btn btn-primary">Создать</button>
+    </div>
+  </form>
+</div>
+
+{% if keys %}
+<div class="card p-4">
+  <h6 class="fw-bold mb-3">Ваши ключи</h6>
+  <table class="table table-sm">
+    <thead><tr><th>Название</th><th>Создан</th><th>Последнее использование</th><th>Статус</th><th></th></tr></thead>
+    <tbody>
+      {% for key in keys %}
+      <tr>
+        <td>{{ key.name|default:"—" }}</td>
+        <td>{{ key.created_at|date:"d.m.Y" }}</td>
+        <td>{{ key.last_used_at|date:"d.m.Y H:i"|default:"никогда" }}</td>
+        <td>{% if key.is_active %}<span class="badge bg-success">Активен</span>{% else %}<span class="badge bg-secondary">Отозван</span>{% endif %}</td>
+        <td>
+          {% if key.is_active %}
+          <form method="post" action="/api-keys/{{ key.id }}/revoke/" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Отозвать ключ?')">Отозвать</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">Ключей пока нет.</p>
+{% endif %}
+
+<div class="card p-3 mt-4 bg-light">
+  <h6 class="fw-bold">Использование API</h6>
+  <pre class="small mb-0">curl -X POST https://your-domain/api/v1/jobs \
+  -H "Authorization: Bearer lp_ваш_ключ" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://disk.yandex.ru/...", "mode":"transcribe"}'</pre>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Удалить ключ из сессии после показа
+{% if request.session.new_api_key %}
+fetch("/api-keys/clear-session-key/", {method:"POST", headers:{"X-CSRFToken":"{{ csrf_token }}"}}).catch(()=>{});
+{% endif %}
+</script>
+{% endblock %}

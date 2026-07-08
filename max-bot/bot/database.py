@@ -629,6 +629,47 @@ async def update_api_job(
         """, job_id, status, duration_sec, result_text, result_analysis, error)
 
 
+async def link_max_account(code: str, max_user_id: int) -> bool:
+    """Привязать MAX user_id к web-аккаунту по одноразовому коду."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT id, bot_user_id FROM web_accounts_webuser
+            WHERE max_link_code = $1
+              AND max_link_code_expires > NOW()
+              AND is_max_linked = FALSE
+        """, code)
+        if row is None:
+            return False
+        web_user_id = row["id"]
+        old_bot_id = row["bot_user_id"]
+
+        async with conn.transaction():
+            # Перенести баланс со старого bot_user_id (синтетического) на настоящий MAX ID
+            if old_bot_id and old_bot_id != max_user_id:
+                old_user = await conn.fetchrow("SELECT star_balance, free_minutes, trial_used FROM users WHERE user_id = $1", old_bot_id)
+                if old_user:
+                    await conn.execute("""
+                        INSERT INTO users (user_id, star_balance, free_minutes, trial_used, created_at)
+                        VALUES ($1, $2, $3, $4, NOW())
+                        ON CONFLICT (user_id) DO UPDATE
+                        SET star_balance = users.star_balance + EXCLUDED.star_balance,
+                            free_minutes = users.free_minutes + EXCLUDED.free_minutes
+                    """, max_user_id, old_user["star_balance"], old_user["free_minutes"], old_user["trial_used"])
+                    # Переключить задания и ключи
+                    await conn.execute("UPDATE api_jobs SET user_id = $1 WHERE user_id = $2", max_user_id, old_bot_id)
+                    await conn.execute("UPDATE api_keys SET user_id = $1 WHERE user_id = $2", max_user_id, old_bot_id)
+                    await conn.execute("DELETE FROM users WHERE user_id = $1", old_bot_id)
+
+            # Обновить web_user
+            await conn.execute("""
+                UPDATE web_accounts_webuser
+                SET bot_user_id = $1, is_max_linked = TRUE, max_link_code = '', max_link_code_expires = NULL
+                WHERE id = $2
+            """, max_user_id, web_user_id)
+
+        return True
+
+
 async def fail_stale_jobs():
     """При старте: задания, застрявшие в pending/processing, помечаем как ошибку."""
     async with pool.acquire() as conn:
