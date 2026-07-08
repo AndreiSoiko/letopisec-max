@@ -9,9 +9,9 @@ from maxapi.types.attachments.buttons import CallbackButton
 
 from bot.config import (
     FREE_TRIAL_MAX_MINUTES, SUBSCRIPTION_PRICE_RUB, SUBSCRIPTION_MINUTES,
-    PRICE_PER_MINUTE_RUB, THESES_PRICE_RUB, PROTOCOL_PRICE_RUB,
+    PRICE_PER_MINUTE_RUB, THESES_PRICE_RUB, PROTOCOL_PRICE_RUB, API_PORT,
 )
-from bot.database import ensure_user, add_free_minutes
+from bot.database import ensure_user, add_free_minutes, create_api_key
 
 logger = logging.getLogger(__name__)
 HOURS = SUBSCRIPTION_MINUTES // 60
@@ -133,3 +133,39 @@ def register_start_handlers(dp: Dispatcher, bot: Bot):
 
         await add_free_minutes(user_id, minutes)
         await event.message.answer(f"✅ Добавлено {int(minutes)} мин к пробному балансу.")
+
+    @dp.message_created(Command("apikey"))
+    async def cmd_apikey(event: MessageCreated):
+        user_id = event.message.sender.user_id
+        username = event.message.sender.username or ""
+        await ensure_user(user_id, username, username)
+
+        text = event.message.body.text or ""
+        parts = text.strip().split(maxsplit=1)
+        name = parts[1] if len(parts) > 1 else ""
+
+        key_id, raw_key = await create_api_key(user_id, name)
+        await event.message.answer(
+            f"🔑 API-ключ создан (показывается один раз!):\n\n"
+            f"`{raw_key}`\n\n"
+            f"Используйте в заголовке:\n"
+            f"`Authorization: Bearer {raw_key}`\n\n"
+            f"Документация: http://{{ваш-сервер}}:{API_PORT}/api/docs\n\n"
+            f"⚠️ Сохраните ключ — повторно он не отображается.\n"
+            f"Чтобы отозвать: /revokekey {key_id}"
+        )
+
+    @dp.message_created(Command("revokekey"))
+    async def cmd_revokekey(event: MessageCreated):
+        user_id = event.message.sender.user_id
+        text = event.message.body.text or ""
+        parts = text.strip().split()
+        if len(parts) < 2 or not parts[1].isdigit():
+            await event.message.answer("Использование: /revokekey <id>\nID ключа указан при его создании.")
+            return
+        from bot.database import revoke_api_key
+        ok = await revoke_api_key(int(parts[1]), user_id)
+        if ok:
+            await event.message.answer(f"✅ Ключ #{parts[1]} отозван.")
+        else:
+            await event.message.answer("❌ Ключ не найден или уже отозван.")

@@ -13,9 +13,9 @@ from maxapi.client.default import DefaultConnectionProperties
 
 from bot.config import (
     MAX_BOT_TOKEN, LOG_LEVEL, YANDEX_API_KEY, ADMIN_IDS,
-    TINKOFF_TERMINAL_KEY, WEBHOOK_PORT,
+    TINKOFF_TERMINAL_KEY, WEBHOOK_PORT, API_PORT,
 )
-from bot.database import init_db, close_db
+from bot.database import init_db, close_db, fail_stale_jobs
 from bot.utils.debug import set_admin_ids
 from bot.handlers import register_start_handlers, register_payment_handlers, register_transcribe_handlers, register_admin_handlers
 
@@ -55,6 +55,7 @@ async def main():
 
     # PostgreSQL
     await init_db()
+    await fail_stale_jobs()
 
     # Админы
     set_admin_ids(ADMIN_IDS)
@@ -86,11 +87,23 @@ async def main():
     logger.info(f"   DB:  PostgreSQL ✅")
     logger.info(f"   💳  T-Bank эквайринг {'✅' if TINKOFF_TERMINAL_KEY else '❌'}")
     logger.info(f"   🎬  Видео: MP4, MKV, AVI, MOV, WebM ✅")
+    logger.info(f"   🌐  REST API: http://0.0.0.0:{API_PORT}/api/docs")
+
+    # REST API сервер (uvicorn в том же event loop)
+    import uvicorn
+    from bot.api.app import create_app
+    api_config = uvicorn.Config(
+        create_app(), host="0.0.0.0", port=API_PORT,
+        log_level="warning", loop="none",
+    )
+    api_server = uvicorn.Server(api_config)
 
     try:
-        # Удаляем webhook перед polling (если был установлен)
         await bot.delete_webhook()
-        await dp.start_polling(bot)
+        await asyncio.gather(
+            dp.start_polling(bot),
+            api_server.serve(),
+        )
     finally:
         await close_db()
         logger.info("Бот остановлен")

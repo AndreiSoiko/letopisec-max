@@ -84,6 +84,36 @@ async def init_db():
             );
 
             CREATE INDEX IF NOT EXISTS idx_tinkoff_user ON tinkoff_orders(user_id);
+
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(user_id),
+                key_hash TEXT UNIQUE NOT NULL,
+                name TEXT DEFAULT '',
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                last_used_at TIMESTAMPTZ
+            );
+
+            CREATE TABLE IF NOT EXISTS api_jobs (
+                id TEXT PRIMARY KEY,
+                user_id BIGINT REFERENCES users(user_id),
+                status TEXT NOT NULL DEFAULT 'pending',
+                mode TEXT NOT NULL,
+                file_url TEXT NOT NULL,
+                language TEXT NOT NULL DEFAULT 'ru-RU',
+                translate_to TEXT DEFAULT '',
+                custom_prompt TEXT DEFAULT '',
+                duration_sec REAL,
+                result_text TEXT,
+                result_analysis TEXT,
+                error TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+            CREATE INDEX IF NOT EXISTS idx_api_jobs_user ON api_jobs(user_id);
         """)
 
         # Миграция: добавить колонки если их нет (для обновления с v2.0)
@@ -487,6 +517,125 @@ async def get_all_users_report() -> list[dict]:
             ORDER BY last_activity DESC NULLS LAST
         """)
     return [dict(r) for r in rows]
+
+
+# ── API Keys ──
+
+import hashlib
+import secrets
+
+
+def _hash_key(raw_key: str) -> str:
+    return hashlib.sha256(raw_key.encode()).hexdigest()
+
+
+async def create_api_key(user_id: int, name: str = "") -> tuple[int, str]:
+    """Создать API-ключ. Возвращает (id, raw_key) — raw_key показывается только один раз."""
+    raw_key = "lp_" + secrets.token_hex(32)
+    key_hash = _hash_key(raw_key)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "INSERT INTO api_keys (user_id, key_hash, name) VALUES ($1, $2, $3) RETURNING id",
+            user_id, key_hash, name,
+        )
+    return row["id"], raw_key
+
+
+async def get_user_by_api_key(raw_key: str) -> Optional[int]:
+    """Вернуть user_id по ключу; обновить last_used_at. None если не найден или неактивен."""
+    key_hash = _hash_key(raw_key)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT user_id FROM api_keys WHERE key_hash = $1 AND is_active = TRUE",
+            key_hash,
+        )
+        if not row:
+            return None
+        await conn.execute(
+            "UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1", key_hash
+        )
+        return row["user_id"]
+
+
+async def list_api_keys(user_id: int) -> list[dict]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, name, is_active, created_at, last_used_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC",
+            user_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def revoke_api_key(key_id: int, user_id: int) -> bool:
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE api_keys SET is_active = FALSE WHERE id = $1 AND user_id = $2",
+            key_id, user_id,
+        )
+    return "UPDATE 1" in result
+
+
+# ── API Jobs ──
+
+async def create_api_job(
+    user_id: int, mode: str, file_url: str,
+    language: str = "ru-RU", translate_to: str = "", custom_prompt: str = "",
+) -> str:
+    import uuid
+    job_id = str(uuid.uuid4())
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO api_jobs (id, user_id, mode, file_url, language, translate_to, custom_prompt)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        """, job_id, user_id, mode, file_url, language, translate_to, custom_prompt)
+    return job_id
+
+
+async def get_api_job(job_id: str, user_id: int) -> Optional[dict]:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM api_jobs WHERE id = $1 AND user_id = $2", job_id, user_id
+        )
+    return dict(row) if row else None
+
+
+async def list_api_jobs(user_id: int, limit: int = 20) -> list[dict]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM api_jobs WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+            user_id, limit,
+        )
+    return [dict(r) for r in rows]
+
+
+async def update_api_job(
+    job_id: str,
+    status: str,
+    duration_sec: float = None,
+    result_text: str = None,
+    result_analysis: str = None,
+    error: str = None,
+):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE api_jobs SET
+                status = $2,
+                duration_sec = COALESCE($3, duration_sec),
+                result_text = COALESCE($4, result_text),
+                result_analysis = COALESCE($5, result_analysis),
+                error = COALESCE($6, error),
+                updated_at = NOW()
+            WHERE id = $1
+        """, job_id, status, duration_sec, result_text, result_analysis, error)
+
+
+async def fail_stale_jobs():
+    """При старте: задания, застрявшие в pending/processing, помечаем как ошибку."""
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE api_jobs SET status = 'error', error = 'Server restarted, please resubmit', updated_at = NOW()
+            WHERE status IN ('pending', 'processing')
+        """)
 
 
 async def get_payments_report() -> list[dict]:
