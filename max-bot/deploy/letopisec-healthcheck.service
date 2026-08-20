@@ -1,0 +1,11 @@
+[Unit]
+Description=Letopisec healthcheck (уведомление админу при падении сервисов/нехватке ресурсов)
+After=network.target
+
+[Service]
+Type=oneshot
+User=letopisec-max
+Group=letopisec-max
+WorkingDirectory=/opt/letopisec/max-bot
+EnvironmentFile=/opt/letopisec/max-bot/.env
+ExecStart=/opt/letopisec/max-bot/venv/bin/python -m bot.healthcheck
