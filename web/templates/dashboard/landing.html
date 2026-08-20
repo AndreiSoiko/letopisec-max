@@ -2,17 +2,33 @@
 {% block title %}Летописец — распознавание речи из аудио и видео{% endblock %}
 
 {% block content %}
+<style>
+  .step-badge {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--grad); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1rem;
+  }
+  .pricing-featured { position: relative; overflow: hidden; }
+  .pricing-featured::before {
+    content: "Популярно";
+    position: absolute; top: 12px; right: -30px;
+    background: var(--grad); color: #fff;
+    font-size: .7rem; font-weight: 700; letter-spacing: .03em;
+    padding: 3px 34px; transform: rotate(45deg);
+  }
+</style>
 
-<div class="p-4 p-md-5 rounded-4 mb-4" style="background:#1e2a3a;">
+<div class="p-4 p-md-5 rounded-4 mb-4" style="background: var(--grad);">
   <div class="row align-items-center g-4">
     <div class="col-lg-8">
       <h1 class="text-white fw-bold mb-3">Превращаем аудио и видео в текст — с помощью AI</h1>
-      <p class="text-light opacity-75 fs-5 mb-4">
+      <p class="text-white opacity-75 fs-5 mb-4">
         Отправьте файл или ссылку боту Летописец в мессенджере MAX — получите готовый
         документ Word с расшифровкой, исправленными ошибками, тезисами и протоколом встречи.
       </p>
       <div class="d-flex flex-wrap gap-2">
-        <a href="https://max.ru/id501810926691_bot" class="btn btn-primary btn-lg">Открыть бота в MAX</a>
+        <a href="https://max.ru/id501810926691_bot" class="btn btn-light btn-lg fw-bold">Открыть бота в MAX</a>
         <a href="/accounts/register/" class="btn btn-outline-light btn-lg">Личный кабинет</a>
       </div>
     </div>
@@ -23,21 +39,21 @@
 <div class="row g-3 mb-5">
   <div class="col-md-4">
     <div class="card p-3 h-100">
-      <div class="fs-3 mb-2">1️⃣</div>
+      <div class="step-badge mb-2">1</div>
       <div class="fw-bold mb-1">Отправьте файл или ссылку</div>
       <div class="text-muted small">Аудио, видео или ссылку на запись — прямо в чат боту</div>
     </div>
   </div>
   <div class="col-md-4">
     <div class="card p-3 h-100">
-      <div class="fs-3 mb-2">2️⃣</div>
+      <div class="step-badge mb-2">2</div>
       <div class="fw-bold mb-1">Распознавание и AI-обработка</div>
       <div class="text-muted small">Речь → текст, исправление ошибок, тезисы, протокол — по выбору</div>
     </div>
   </div>
   <div class="col-md-4">
     <div class="card p-3 h-100">
-      <div class="fs-3 mb-2">3️⃣</div>
+      <div class="step-badge mb-2">3</div>
       <div class="fw-bold mb-1">Готовый документ</div>
       <div class="text-muted small">Оформленный .docx с расшифровкой прямо в чате</div>
     </div>
@@ -100,7 +116,7 @@
     </div>
   </div>
   <div class="col-md-4">
-    <div class="card p-3 h-100 border-primary">
+    <div class="card p-3 h-100 border-primary pricing-featured">
       <div class="fw-bold mb-1">Подписка</div>
       <div class="fs-3 fw-bold mb-1">{{ subscription_price }} ₽<span class="fs-6 text-muted">/мес</span></div>
       <div class="text-muted small mb-3">{{ subscription_hours }} часов распознавания в месяц.<br>Тезисы и протокол — бесплатно</div>
@@ -115,10 +131,10 @@
   </div>
 </div>
 
-<div class="p-4 p-md-5 rounded-4 mb-4 text-center" style="background:#1e2a3a;">
+<div class="p-4 p-md-5 rounded-4 mb-4 text-center" style="background: var(--grad);">
   <h2 class="text-white fw-bold mb-3">Готовы начать?</h2>
   <div class="d-flex flex-wrap justify-content-center gap-2">
-    <a href="https://max.ru/id501810926691_bot" class="btn btn-primary btn-lg">Открыть бота в MAX</a>
+    <a href="https://max.ru/id501810926691_bot" class="btn btn-light btn-lg fw-bold">Открыть бота в MAX</a>
     <a href="/accounts/register/" class="btn btn-outline-light btn-lg">Зарегистрироваться на сайте</a>
   </div>
 </div>
