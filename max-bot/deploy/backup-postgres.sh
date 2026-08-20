@@ -11,9 +11,17 @@ DUMP_FILE="$BACKUP_DIR/transcription_bot_max-$TIMESTAMP.dump"
 
 mkdir -p "$BACKUP_DIR"
 
-set -a
-source "$ENV_FILE"
-set +a
+# .env — не bash-safe файл (значения со пробелами без кавычек, напр. OFERTA_DATE),
+# поэтому читаем только нужные переменные через grep, не делаем `source`.
+_env_get() {
+    grep -E "^$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2-
+}
+
+DATABASE_URL=$(_env_get DATABASE_URL)
+YANDEX_S3_BUCKET=$(_env_get YANDEX_S3_BUCKET)
+YANDEX_S3_KEY_ID=$(_env_get YANDEX_S3_KEY_ID)
+YANDEX_S3_SECRET_KEY=$(_env_get YANDEX_S3_SECRET_KEY)
+export YANDEX_S3_BUCKET YANDEX_S3_KEY_ID YANDEX_S3_SECRET_KEY
 
 pg_dump --format=custom --file="$DUMP_FILE" "$DATABASE_URL"
 
