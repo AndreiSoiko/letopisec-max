@@ -5,11 +5,11 @@ After=network.target postgresql.service
 [Service]
 User=letopisec-max
 Group=letopisec-max
-WorkingDirectory=/home/letopisec-max/web
-EnvironmentFile=/home/letopisec-max/web/.env
+WorkingDirectory=/opt/letopisec/web
+EnvironmentFile=/opt/letopisec/web/.env
 ExecStart=/home/letopisec-max/web-venv/bin/gunicorn \
     --workers 3 \
-    --bind 127.0.0.1:8080 \
+    --bind 127.0.0.1:8081 \
     --timeout 120 \
     --access-logfile /var/log/letopisec-web/access.log \
     --error-logfile /var/log/letopisec-web/error.log \
