@@ -7,6 +7,7 @@ from pathlib import Path
 
 from maxapi import Bot, Dispatcher, F
 from maxapi.enums.upload_type import UploadType
+from maxapi.enums.message_link_type import MessageLinkType
 from maxapi.types import MessageCreated, MessageCallback
 from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
 from maxapi.types.attachments.buttons import CallbackButton
@@ -88,10 +89,21 @@ class _YoutubeUrlFilter(BaseFilter):
         return is_youtube_url(text) and user_id not in _waiting_custom_prompt
 
 
+def _get_attachments(message) -> list:
+    """Вложения из тела сообщения, либо (для пересланных) из message.link.message —
+    MAX кладёт пересланное сообщение в message.link, а message.body может быть None."""
+    attachments = getattr(message.body, "attachments", None) if message.body else None
+    if attachments:
+        return attachments
+    link = getattr(message, "link", None)
+    if link and getattr(link, "type", None) == MessageLinkType.FORWARD:
+        linked_body = getattr(link, "message", None)
+        return getattr(linked_body, "attachments", None) or []
+    return []
+
+
 def _has_media(event: MessageCreated) -> bool:
-    if not event.message.body or not event.message.body.attachments:
-        return False
-    for att in event.message.body.attachments:
+    for att in _get_attachments(event.message):
         if getattr(att, "type", "") in ("audio", "video", "file"):
             return True
     return False
@@ -171,7 +183,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
     async def test(event: MessageCreated):
         await event.message.answer('Тест')
 
-    @dp.message_created(F.message.body.attachments)
+    @dp.message_created(F.message.body.attachments | F.message.link.message.attachments)
     async def handle_media(event: MessageCreated):
         if not _has_media(event):
             # MAX добавляет 'share' вложение к ссылкам — проверяем на медиа-URL
@@ -188,7 +200,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             url = extract_media_url(text)
             # Fallback: URL из payload share-вложения (если в тексте не нашли)
             if not url:
-                for att in (event.message.body.attachments or []):
+                for att in _get_attachments(event.message):
                     if getattr(att, "type", "") == "share":
                         payload_url = getattr(getattr(att, "payload", None), "url", None)
                         if payload_url and is_youtube_url(payload_url):
@@ -215,7 +227,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             return
 
         attachment = None
-        for att in event.message.body.attachments:
+        for att in _get_attachments(event.message):
             if getattr(att, "type", "") in ("audio", "video", "file"):
                 attachment = att
                 break
