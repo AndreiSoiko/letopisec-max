@@ -89,11 +89,14 @@ async def _notify(text: str) -> None:
     default_conn = DefaultConnectionProperties(connector=connector) if connector else DefaultConnectionProperties()
     bot = Bot(token=MAX_BOT_TOKEN, default_connection=default_conn)
     bot.set_api_url(MAX_API_URL)
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.send_message(user_id=admin_id, text=text)
-        except Exception:
-            logger.exception(f"Не удалось отправить уведомление админу {admin_id}")
+    try:
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(user_id=admin_id, text=text)
+            except Exception:
+                logger.exception(f"Не удалось отправить уведомление админу {admin_id}")
+    finally:
+        await bot.close_session()
 
 
 async def main() -> None:
