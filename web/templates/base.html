@@ -26,6 +26,11 @@
     <span class="text-light small">{{ user.get_display_name }}</span>
     <a href="/accounts/logout/" class="btn btn-sm btn-outline-light">Выйти</a>
   </div>
+  {% else %}
+  <div class="d-flex align-items-center gap-2">
+    <a href="/accounts/login/" class="btn btn-sm btn-outline-light">Войти</a>
+    <a href="/accounts/register/" class="btn btn-sm btn-light">Регистрация</a>
+  </div>
   {% endif %}
 </nav>
 

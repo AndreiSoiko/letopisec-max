@@ -1,12 +1,13 @@
-from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.utils import timezone
 
 from billing.models import BotUser, BotSubscription, BotApiJob
 
 
-@login_required
 def index(request):
+    if not request.user.is_authenticated:
+        return render(request, "dashboard/landing.html")
+
     user = request.user
     bot_user = BotUser.objects.filter(user_id=user.bot_user_id).first() if user.bot_user_id else None
     subscription = None

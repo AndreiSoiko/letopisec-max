@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Летописец — распознавание речи из аудио и видео{% endblock %}
+
+{% block content %}
+
+<div class="p-4 p-md-5 rounded-4 mb-4" style="background:#1e2a3a;">
+  <div class="row align-items-center g-4">
+    <div class="col-lg-8">
+      <h1 class="text-white fw-bold mb-3">Превращаем аудио и видео в текст — с помощью AI</h1>
+      <p class="text-light opacity-75 fs-5 mb-4">
+        Отправьте файл или ссылку боту Летописец в мессенджере MAX — получите готовый
+        документ Word с расшифровкой, исправленными ошибками, тезисами и протоколом встречи.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="https://max.ru/id501810926691_bot" class="btn btn-primary btn-lg">Открыть бота в MAX</a>
+        <a href="/accounts/register/" class="btn btn-outline-light btn-lg">Личный кабинет</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="h4 fw-bold mb-3">Как это работает</h2>
+<div class="row g-3 mb-5">
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <div class="fs-3 mb-2">1️⃣</div>
+      <div class="fw-bold mb-1">Отправьте файл или ссылку</div>
+      <div class="text-muted small">Аудио, видео или ссылку на запись — прямо в чат боту</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <div class="fs-3 mb-2">2️⃣</div>
+      <div class="fw-bold mb-1">Распознавание и AI-обработка</div>
+      <div class="text-muted small">Речь → текст, исправление ошибок, тезисы, протокол — по выбору</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <div class="fs-3 mb-2">3️⃣</div>
+      <div class="fw-bold mb-1">Готовый документ</div>
+      <div class="text-muted small">Оформленный .docx с расшифровкой прямо в чате</div>
+    </div>
+  </div>
+</div>
+
+<h2 class="h4 fw-bold mb-3">Возможности</h2>
+<div class="row g-3 mb-5">
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <i class="bi bi-file-earmark-music fs-4 text-primary"></i>
+      <div class="fw-bold mt-2 mb-1">Аудио и видео файлы</div>
+      <div class="text-muted small">MP3, WAV, OGG, FLAC, M4A, AAC, WMA, MP4, MKV, AVI, MOV, WebM</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <i class="bi bi-link-45deg fs-4 text-primary"></i>
+      <div class="fw-bold mt-2 mb-1">Ссылки на видео</div>
+      <div class="text-muted small">VK Video, Rutube, OK.ru, Vimeo, TikTok, Яндекс.Диск — без скачивания</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <i class="bi bi-camera-video fs-4 text-primary"></i>
+      <div class="fw-bold mt-2 mb-1">Записи конференций</div>
+      <div class="text-muted small">Zoom, Microsoft Teams, Skype, Яндекс.Телемост</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <i class="bi bi-magic fs-4 text-primary"></i>
+      <div class="fw-bold mt-2 mb-1">AI-обработка</div>
+      <div class="text-muted small">Исправление ошибок распознавания, ключевые тезисы, протокол встречи</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <i class="bi bi-code-slash fs-4 text-primary"></i>
+      <div class="fw-bold mt-2 mb-1">REST API</div>
+      <div class="text-muted small">Транскрибация по HTTP — без мессенджера, для интеграций</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <i class="bi bi-speedometer2 fs-4 text-primary"></i>
+      <div class="fw-bold mt-2 mb-1">Личный кабинет</div>
+      <div class="text-muted small">Баланс, история заданий, управление API-ключами</div>
+    </div>
+  </div>
+</div>
+
+<h2 class="h4 fw-bold mb-3">Тарифы</h2>
+<div class="row g-3 mb-5">
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <div class="fw-bold mb-1">Пробный период</div>
+      <div class="fs-3 fw-bold mb-1">Бесплатно</div>
+      <div class="text-muted small mb-3">1 файл до 41 минуты</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100 border-primary">
+      <div class="fw-bold mb-1">Подписка</div>
+      <div class="fs-3 fw-bold mb-1">300 ₽<span class="fs-6 text-muted">/мес</span></div>
+      <div class="text-muted small mb-3">10 часов распознавания в месяц.<br>Тезисы и протокол — бесплатно</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <div class="fw-bold mb-1">Поминутно</div>
+      <div class="fs-3 fw-bold mb-1">4 ₽<span class="fs-6 text-muted">/мин</span></div>
+      <div class="text-muted small mb-3">Без подписки.<br>Тезисы +15 ₽, протокол +15 ₽</div>
+    </div>
+  </div>
+</div>
+
+<div class="p-4 p-md-5 rounded-4 mb-4 text-center" style="background:#1e2a3a;">
+  <h2 class="text-white fw-bold mb-3">Готовы начать?</h2>
+  <div class="d-flex flex-wrap justify-content-center gap-2">
+    <a href="https://max.ru/id501810926691_bot" class="btn btn-primary btn-lg">Открыть бота в MAX</a>
+    <a href="/accounts/register/" class="btn btn-outline-light btn-lg">Зарегистрироваться на сайте</a>
+  </div>
+</div>
+
+<footer class="text-center text-muted small py-4">
+  <a href="/oferta" class="text-muted">Публичная оферта</a>
+  ·
+  <a href="mailto:letopisec-max@yandex.ru" class="text-muted">letopisec-max@yandex.ru</a>
+</footer>
+
+{% endblock %}
