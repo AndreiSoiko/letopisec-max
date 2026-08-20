@@ -13,6 +13,7 @@ from bot.services.tinkoff import verify_notification
 from bot.database import (
     get_tinkoff_order, complete_tinkoff_order,
     add_stars, create_subscription, get_star_balance, save_payment,
+    resolve_promo_terms, record_promo_redemption,
 )
 from bot.config import (
     SUBSCRIPTION_MINUTES, OFERTA_DATE,
@@ -165,14 +166,19 @@ async def _process_payment(data: dict) -> str:
         )
 
     elif payment_type == "subscription":
+        promo_code = order.get("promo_code")
+        minutes_total, duration_days = resolve_promo_terms(promo_code)
         sub = await create_subscription(
             user_id=user_id,
             stars_paid=amount_rub,
             telegram_charge_id=payment_id,
-            minutes_total=SUBSCRIPTION_MINUTES,
+            minutes_total=minutes_total,
+            duration_days=duration_days,
         )
+        if promo_code:
+            await record_promo_redemption(user_id, promo_code)
         exp = sub["expires_at"].strftime("%d.%m.%Y")
-        hours = SUBSCRIPTION_MINUTES // 60
+        hours = minutes_total // 60
         await _bot.send_message(
             chat_id=chat_id,
             text=(

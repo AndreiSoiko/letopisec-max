@@ -48,6 +48,11 @@ THESES_PRICE_RUB = int(os.getenv("THESES_PRICE_RUB", "15"))
 PROTOCOL_PRICE_RUB = int(os.getenv("PROTOCOL_PRICE_RUB", "15"))
 TOPUP_AMOUNTS_RUB = [50, 100, 200]
 
+# ── Промокоды ──
+PROMO_CODES = {
+    "super3": {"price_rub": 200, "duration_days": 90, "minutes_total": SUBSCRIPTION_MINUTES * 3},
+}
+
 # ── T-Bank Интернет-эквайринг ──
 TINKOFF_TERMINAL_KEY = os.getenv("TINKOFF_TERMINAL_KEY", "")
 TINKOFF_PASSWORD = os.getenv("TINKOFF_PASSWORD", "")

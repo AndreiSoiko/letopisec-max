@@ -114,6 +114,14 @@ async def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
             CREATE INDEX IF NOT EXISTS idx_api_jobs_user ON api_jobs(user_id);
+
+            CREATE TABLE IF NOT EXISTS promo_redemptions (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(user_id),
+                code TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (user_id, code)
+            );
         """)
 
         # Миграция: добавить колонки если их нет (для обновления с v2.0)
@@ -152,6 +160,14 @@ async def init_db():
         try:
             await conn.execute("""
                 ALTER TABLE tinkoff_orders ADD COLUMN IF NOT EXISTS chat_id BIGINT
+            """)
+        except Exception:
+            pass
+
+        # Миграция: promo_code в tinkoff_orders — какой промокод применён к заказу
+        try:
+            await conn.execute("""
+                ALTER TABLE tinkoff_orders ADD COLUMN IF NOT EXISTS promo_code TEXT
             """)
         except Exception:
             pass
@@ -257,10 +273,10 @@ async def get_active_subscription(user_id: int) -> Optional[dict]:
 
 async def create_subscription(
     user_id: int, stars_paid: int, telegram_charge_id: str,
-    minutes_total: int = SUBSCRIPTION_MINUTES,
+    minutes_total: int = SUBSCRIPTION_MINUTES, duration_days: int = 30,
 ) -> dict:
     now = datetime.now(timezone.utc)
-    expires = now + timedelta(days=30)
+    expires = now + timedelta(days=duration_days)
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO subscriptions
@@ -334,12 +350,13 @@ async def get_user_stats(user_id: int) -> dict:
 async def create_tinkoff_order(
     order_id: str, user_id: int, payment_type: str,
     amount_rub: int, tinkoff_payment_id: str, chat_id: int = None,
+    promo_code: str | None = None,
 ):
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO tinkoff_orders (order_id, user_id, chat_id, payment_type, amount_rub, tinkoff_payment_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
-        """, order_id, user_id, chat_id, payment_type, amount_rub, tinkoff_payment_id)
+            INSERT INTO tinkoff_orders (order_id, user_id, chat_id, payment_type, amount_rub, tinkoff_payment_id, promo_code)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        """, order_id, user_id, chat_id, payment_type, amount_rub, tinkoff_payment_id, promo_code)
 
 
 async def get_tinkoff_order(order_id: str) -> Optional[dict]:
@@ -355,6 +372,40 @@ async def complete_tinkoff_order(order_id: str):
         await conn.execute(
             "UPDATE tinkoff_orders SET status = 'paid' WHERE order_id = $1", order_id
         )
+
+
+# ── Промокоды ──
+
+async def has_used_promo(user_id: int, code: str) -> bool:
+    async with pool.acquire() as conn:
+        row = await conn.fetchval(
+            "SELECT 1 FROM promo_redemptions WHERE user_id = $1 AND code = $2",
+            user_id, code,
+        )
+        return row is not None
+
+
+async def record_promo_redemption(user_id: int, code: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO promo_redemptions (user_id, code) VALUES ($1, $2)
+            ON CONFLICT (user_id, code) DO NOTHING
+        """, user_id, code)
+
+
+def resolve_promo_terms(promo_code: Optional[str]) -> tuple[int, int]:
+    """Вернуть (minutes_total, duration_days) для промокода, либо дефолты подписки."""
+    from bot.config import PROMO_CODES
+    if promo_code and promo_code in PROMO_CODES:
+        promo = PROMO_CODES[promo_code]
+        return promo["minutes_total"], promo["duration_days"]
+    return SUBSCRIPTION_MINUTES, 30
+
+
+async def get_all_user_ids() -> list[int]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT user_id FROM users")
+        return [row["user_id"] for row in rows]
 
 
 # ── Проверка доступа ──

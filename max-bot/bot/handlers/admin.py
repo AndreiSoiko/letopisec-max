@@ -15,13 +15,13 @@ from bot.database import (
     get_payments_report, get_usage_report,
     get_tinkoff_order, complete_tinkoff_order,
     add_stars, create_subscription, get_star_balance, save_payment,
+    resolve_promo_terms, record_promo_redemption,
 )
 from bot.services.excel_report import (
     build_overview_report, build_user_billing_report,
     build_payments_report, build_usage_report,
 )
 from bot.services.tinkoff import get_state
-from bot.config import SUBSCRIPTION_MINUTES
 
 logger = logging.getLogger(__name__)
 
@@ -215,14 +215,19 @@ def register_admin_handlers(dp: Dispatcher, bot: Bot):
             )
 
         elif payment_type == "subscription":
+            promo_code = order.get("promo_code")
+            minutes_total, duration_days = resolve_promo_terms(promo_code)
             sub = await create_subscription(
                 user_id=target_user_id,
                 stars_paid=amount_rub,
                 telegram_charge_id=payment_id,
-                minutes_total=SUBSCRIPTION_MINUTES,
+                minutes_total=minutes_total,
+                duration_days=duration_days,
             )
+            if promo_code:
+                await record_promo_redemption(target_user_id, promo_code)
             exp = sub["expires_at"].strftime("%d.%m.%Y")
-            hours = SUBSCRIPTION_MINUTES // 60
+            hours = minutes_total // 60
             await bot.send_message(
                 chat_id=target_user_id,
                 text=(

@@ -13,12 +13,12 @@ from bot.config import (
     SUBSCRIPTION_PRICE_RUB, SUBSCRIPTION_MINUTES,
     FREE_TRIAL_MAX_MINUTES, PRICE_PER_MINUTE_RUB,
     TOPUP_AMOUNTS_RUB, THESES_PRICE_RUB, PROTOCOL_PRICE_RUB,
-    TINKOFF_TERMINAL_KEY,
+    TINKOFF_TERMINAL_KEY, PROMO_CODES,
 )
 from bot.database import (
     ensure_user, get_user, get_active_subscription,
     get_star_balance, get_user_stats, add_stars,
-    create_tinkoff_order, save_user_email,
+    create_tinkoff_order, save_user_email, has_used_promo,
 )
 from bot.services.tinkoff import init_payment, new_order_id
 
@@ -27,7 +27,7 @@ HOURS = SUBSCRIPTION_MINUTES // 60
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-# Состояние ожидания email: user_id → {"type": "topup"|"subscription", "amount": int, "chat_id": int}
+# Состояние ожидания email: user_id → {"type", "amount", "chat_id", "promo_code"}
 _pending_payment: dict[int, dict] = {}
 _waiting_email: set[int] = set()
 
@@ -123,6 +123,30 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
         await ensure_user(user_id)
         await _request_or_pay(user_id, chat_id, "subscription", SUBSCRIPTION_PRICE_RUB)
 
+    # ── Промокод ──
+    @dp.message_created(Command("promo"))
+    async def cmd_promo(event: MessageCreated):
+        user_id = event.message.sender.user_id
+        chat_id = event.message.recipient.chat_id
+        await ensure_user(user_id)
+
+        parts = (event.message.body.text or "").strip().split()
+        if len(parts) < 2:
+            await event.message.answer("❌ Укажите промокод. Пример: /promo super3")
+            return
+
+        code = parts[1].strip().lower()
+        promo = PROMO_CODES.get(code)
+        if not promo:
+            await event.message.answer("❌ Промокод не найден.")
+            return
+
+        if await has_used_promo(user_id, code):
+            await event.message.answer("❌ Вы уже использовали этот промокод.")
+            return
+
+        await _request_or_pay(user_id, chat_id, "subscription", promo["price_rub"], promo_code=code)
+
     # ── Пополнение ──
     @dp.message_created(Command("topup"))
     async def cmd_topup(event: MessageCreated):
@@ -180,6 +204,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
                 payment_type=pending["type"],
                 amount=pending["amount"],
                 email=text,
+                promo_code=pending.get("promo_code"),
             )
         else:
             await bot.send_message(
@@ -236,10 +261,12 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
 
     # ── Внутренние функции ──
 
-    async def _request_or_pay(user_id: int, chat_id: int, payment_type: str, amount: int):
+    async def _request_or_pay(
+        user_id: int, chat_id: int, payment_type: str, amount: int,
+        promo_code: str | None = None,
+    ):
         """Проверить наличие email. Если есть — платить, если нет — запросить."""
         if not TINKOFF_TERMINAL_KEY:
-            desc = f"подписка на 1 месяц" if payment_type == "subscription" else f"пополнение на {amount} ₽"
             await bot.send_message(
                 chat_id=chat_id,
                 text=f"⚠️ Оплата временно недоступна. Обратитесь в поддержку.",
@@ -250,12 +277,13 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
         email = user.get("email") if user else None
 
         if email:
-            await _execute_payment(user_id, chat_id, payment_type, amount, email)
+            await _execute_payment(user_id, chat_id, payment_type, amount, email, promo_code=promo_code)
         else:
             _pending_payment[user_id] = {
                 "type": payment_type,
                 "amount": amount,
                 "chat_id": chat_id,
+                "promo_code": promo_code,
             }
             _waiting_email.add(user_id)
             await bot.send_message(
@@ -266,9 +294,17 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
                 ),
             )
 
-    async def _execute_payment(user_id: int, chat_id: int, payment_type: str, amount: int, email: str):
+    async def _execute_payment(
+        user_id: int, chat_id: int, payment_type: str, amount: int, email: str,
+        promo_code: str | None = None,
+    ):
         """Создать заказ в T-Bank и отправить ссылку на оплату."""
-        if payment_type == "subscription":
+        promo = PROMO_CODES.get(promo_code) if promo_code else None
+
+        if promo:
+            months = promo["duration_days"] // 30
+            description = f"Летописец: промо {promo_code} — подписка на {months} мес | MAX ID: {user_id}"
+        elif payment_type == "subscription":
             description = f"Летописец: подписка на 1 месяц | MAX ID: {user_id}"
         else:
             description = f"Летописец: пополнение баланса на {amount} ₽ | MAX ID: {user_id}"
@@ -292,10 +328,22 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             payment_type=payment_type,
             amount_rub=amount,
             tinkoff_payment_id=result["payment_id"],
+            promo_code=promo_code,
         )
 
         oferta_note = "Переходя по ссылке на оплату, вы принимаете условия оферты: https://letopisecmax.ru/oferta"
-        if payment_type == "subscription":
+        if promo:
+            months = promo["duration_days"] // 30
+            promo_hours = promo["minutes_total"] // 60
+            text = (
+                f"💎 Промо {promo_code.upper()} — подписка на {months} мес. за {amount} ₽\n"
+                f"• {promo_hours} часов распознавания\n"
+                f"• Тезисы и протокол — бесплатно\n\n"
+                f"Ссылка для оплаты:\n{result['payment_url']}\n\n"
+                f"После оплаты подписка активируется автоматически.\n\n"
+                f"{oferta_note}"
+            )
+        elif payment_type == "subscription":
             text = (
                 f"💎 Подписка — {SUBSCRIPTION_PRICE_RUB} ₽/мес\n"
                 f"• {HOURS} часов распознавания\n"
