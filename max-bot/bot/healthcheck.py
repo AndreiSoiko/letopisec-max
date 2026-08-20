@@ -91,7 +91,7 @@ async def _notify(text: str) -> None:
     bot.set_api_url(MAX_API_URL)
     for admin_id in ADMIN_IDS:
         try:
-            await bot.send_message(chat_id=admin_id, text=text)
+            await bot.send_message(user_id=admin_id, text=text)
         except Exception:
             logger.exception(f"Не удалось отправить уведомление админу {admin_id}")
 

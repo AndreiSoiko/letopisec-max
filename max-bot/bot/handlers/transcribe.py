@@ -1168,7 +1168,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                 try:
                     report_path = await create_error_report(user_id, file_name, e)
                     await bot.send_message(
-                        chat_id=admin_id,
+                        user_id=admin_id,
                         text=f"🚨 Ошибка у {user_id}\n📁 {file_name}\n❌ {str(e)[:200]}",
                     )
                     report_path.unlink(missing_ok=True)
