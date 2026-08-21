@@ -16,6 +16,7 @@ from bot.database import (
     get_tinkoff_order, complete_tinkoff_order,
     add_stars, create_subscription, get_star_balance, save_payment,
     resolve_promo_terms, record_promo_redemption,
+    get_source_breakdown,
 )
 from bot.services.excel_report import (
     build_overview_report, build_user_billing_report,
@@ -62,6 +63,20 @@ def register_admin_handlers(dp: Dispatcher, bot: Bot):
             "🔐 Панель администратора\nВыберите отчёт:",
             attachments=[kb.adjust(1).as_markup()],
         )
+
+    @dp.message_created(F.message.body.text.lower().contains("/sources"))
+    async def cmd_sources(event: MessageCreated):
+        user_id = event.message.sender.user_id
+        if not is_admin(user_id):
+            return
+        data = await get_source_breakdown()
+        lines = ["📊 Источники регистраций (топ 20)\n"]
+        total = sum(row["count"] for row in data["sources"])
+        for row in data["sources"]:
+            lines.append(f"{row['source']:<20} — {row['count']}")
+        lines.append(f"\nВсего пользователей: {total}")
+        lines.append(f"👥 Приведено по рефералке: {data['referred_total']}")
+        await event.message.answer("\n".join(lines))
 
     @dp.message_callback(F.callback.payload == "adm:overview")
     async def cb_overview(event: MessageCallback):

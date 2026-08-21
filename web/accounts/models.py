@@ -68,7 +68,7 @@ class WebUser(AbstractBaseUser, PermissionsMixin):
         return self.max_link_code
 
     @transaction.atomic
-    def initialize_bot_user(self):
+    def initialize_bot_user(self, source: str = ""):
         """Создаёт запись в таблице users (bot DB) для нового веб-пользователя."""
         from billing.models import BotUser
         bot_user_id = _gen_bot_user_id()
@@ -78,6 +78,7 @@ class WebUser(AbstractBaseUser, PermissionsMixin):
             user_id=bot_user_id,
             username=f"web_{self.pk}",
             first_name=self.get_display_name(),
+            signup_source=source[:40],
         )
         self.bot_user_id = bot_user_id
         self.save(update_fields=["bot_user_id"])

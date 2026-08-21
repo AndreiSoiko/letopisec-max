@@ -43,6 +43,7 @@ def _menu_kb():
     kb.add(CallbackButton(text="💎 Купить подписку", payload="menu:subscribe"))
     kb.add(CallbackButton(text="💳 Пополнить баланс", payload="menu:topup"))
     kb.add(CallbackButton(text="📖 Тарифы", payload="menu:tariffs"))
+    kb.add(CallbackButton(text="🤝 Пригласить друга", payload="menu:invite"))
     kb.add(CallbackButton(text="🆘 Поддержка", payload="menu:support"))
     return kb.adjust(1).as_markup()
 

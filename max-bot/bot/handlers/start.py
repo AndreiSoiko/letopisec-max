@@ -10,8 +10,12 @@ from maxapi.types.attachments.buttons import CallbackButton
 from bot.config import (
     FREE_TRIAL_MAX_MINUTES, SUBSCRIPTION_PRICE_RUB, SUBSCRIPTION_MINUTES,
     PRICE_PER_MINUTE_RUB, THESES_PRICE_RUB, PROTOCOL_PRICE_RUB, API_PORT,
+    MAX_BOT_LINK, REFERRAL_BONUS_MINUTES,
 )
-from bot.database import ensure_user, add_free_minutes, create_api_key, link_max_account
+from bot.database import (
+    ensure_user, add_free_minutes, create_api_key, link_max_account,
+    apply_start_payload, get_referral_stats,
+)
 
 logger = logging.getLogger(__name__)
 HOURS = SUBSCRIPTION_MINUTES // 60
@@ -25,13 +29,48 @@ def _welcome_kb():
     return kb.adjust(1).as_markup()
 
 
+async def _invite_text(user_id: int) -> str:
+    stats = await get_referral_stats(user_id)
+    link = f"{MAX_BOT_LINK}?start=ref{user_id}"
+    return (
+        f"🤝 Приглашайте коллег — бонус получаете оба!\n\n"
+        f"За каждого друга, который запустит бота по вашей ссылке, "
+        f"вы и он получите по {REFERRAL_BONUS_MINUTES:.0f} минут расшифровки бесплатно.\n\n"
+        f"Ваша ссылка:\n{link}\n\n"
+        f"👥 Уже приглашено: {stats['invited_count']}"
+    )
+
+
+async def _process_referral(bot: Bot, user_id: int, is_new: bool, payload: str):
+    """При первом /start с deep-link payload — зачислить реферальный бонус или сохранить источник."""
+    if not is_new or not payload:
+        return
+    try:
+        referrer_id = await apply_start_payload(user_id, payload)
+    except Exception:
+        logger.exception("Ошибка обработки start-payload %r для %s", payload, user_id)
+        return
+    if referrer_id:
+        try:
+            await bot.send_message(
+                chat_id=referrer_id,
+                text=(
+                    f"🎉 По вашей ссылке присоединился новый пользователь!\n"
+                    f"+{REFERRAL_BONUS_MINUTES:.0f} мин начислено на ваш баланс."
+                ),
+            )
+        except Exception:
+            logger.warning("Не удалось уведомить реферера %s", referrer_id)
+
+
 def register_start_handlers(dp: Dispatcher, bot: Bot):
 
     @dp.bot_started()
     async def on_bot_started(event: BotStarted):
         user_id = event.user.user_id
         username = event.user.username or ""
-        await ensure_user(user_id, username, username)
+        is_new = await ensure_user(user_id, username, username)
+        await _process_referral(bot, user_id, is_new, event.payload or "")
 
         await event.bot.send_message(
             chat_id=event.chat_id,
@@ -50,7 +89,12 @@ def register_start_handlers(dp: Dispatcher, bot: Bot):
     async def cmd_start(event: MessageCreated):
         user_id = event.message.sender.user_id
         username = event.message.sender.username or ""
-        await ensure_user(user_id, username, username)
+        is_new = await ensure_user(user_id, username, username)
+
+        text = event.message.body.text or ""
+        parts = text.strip().split()
+        payload = parts[1].strip() if len(parts) > 1 else ""
+        await _process_referral(bot, user_id, is_new, payload)
 
         await event.message.answer(
             f"👋 Привет, {username or 'друг'}!\n\n"
@@ -61,6 +105,19 @@ def register_start_handlers(dp: Dispatcher, bot: Bot):
             f"Нажмите кнопку ниже или отправьте файл 👇",
             attachments=[_welcome_kb()],
         )
+
+    @dp.message_created(Command("invite"))
+    async def cmd_invite(event: MessageCreated):
+        user_id = event.message.sender.user_id
+        username = event.message.sender.username or ""
+        await ensure_user(user_id, username, username)
+        await event.message.answer(await _invite_text(user_id))
+
+    @dp.message_callback(F.callback.payload == "menu:invite")
+    async def cb_invite(event: MessageCallback):
+        user_id = event.callback.user.user_id
+        await ensure_user(user_id)
+        await event.message.answer(await _invite_text(user_id))
 
     @dp.message_callback(F.callback.payload == "welcome:features")
     async def cb_features(event: MessageCallback):
@@ -109,7 +166,7 @@ def register_start_handlers(dp: Dispatcher, bot: Bot):
             f"📝+📋 +Протокол (+{PROTOCOL_PRICE_RUB} ₽)\n"
             f"(по подписке — бесплатно)\n\n"
             f"Форматы: MP3 WAV OGG FLAC M4A MP4 MKV AVI MOV WebM\n\n"
-            f"/menu /balance /subscribe /topup"
+            f"/menu /balance /subscribe /topup /invite"
         )
 
     @dp.message_created(Command("freejune"))

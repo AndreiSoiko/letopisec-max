@@ -23,7 +23,7 @@ def register(request):
             password=cd["password1"],
             display_name=cd["display_name"],
         )
-        user.initialize_bot_user()
+        user.initialize_bot_user(source=request.session.get("signup_source", ""))
         auth.login(request, user, backend="accounts.backends.EmailBackend")
         messages.success(request, "Добро пожаловать! Аккаунт создан.")
         return redirect("/")
@@ -237,7 +237,7 @@ def _social_login(request, provider: str, social_id, email: str):
         user = WebUser.objects.create_user(email=fallback_email, password=None, display_name=name)
         setattr(user, f"{'vk' if provider == 'vk' else 'yandex'}_id", social_id)
         user.save()
-        user.initialize_bot_user()
+        user.initialize_bot_user(source=request.session.get("signup_source", ""))
         messages.success(request, "Аккаунт создан через социальную сеть.")
 
     auth.login(request, user, backend="accounts.backends.EmailBackend")

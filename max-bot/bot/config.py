@@ -53,6 +53,10 @@ PROMO_CODES = {
     "super3": {"price_rub": 200, "duration_days": 90, "minutes_total": SUBSCRIPTION_MINUTES * 3},
 }
 
+# ── Реферальная программа и метки источников ──
+MAX_BOT_LINK = os.getenv("MAX_BOT_LINK", "https://max.ru/id501810926691_bot")
+REFERRAL_BONUS_MINUTES = float(os.getenv("REFERRAL_BONUS_MINUTES", "15"))
+
 # ── T-Bank Интернет-эквайринг ──
 TINKOFF_TERMINAL_KEY = os.getenv("TINKOFF_TERMINAL_KEY", "")
 TINKOFF_PASSWORD = os.getenv("TINKOFF_PASSWORD", "")

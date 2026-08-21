@@ -1,6 +1,7 @@
 """PostgreSQL — пользователи, балансы, подписки, платежи, транскрибации."""
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -8,7 +9,7 @@ import asyncpg
 
 from bot.config import (
     DATABASE_URL, FREE_TRIAL_MAX_MINUTES, SUBSCRIPTION_MINUTES,
-    PRICE_PER_MINUTE_RUB,
+    PRICE_PER_MINUTE_RUB, REFERRAL_BONUS_MINUTES,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,6 +173,20 @@ async def init_db():
         except Exception:
             pass
 
+        # Миграция: реферальная программа и метка источника регистрации
+        try:
+            await conn.execute("""
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by BIGINT
+            """)
+        except Exception:
+            pass
+        try:
+            await conn.execute("""
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_source TEXT DEFAULT ''
+            """)
+        except Exception:
+            pass
+
     logger.info("Таблицы БД готовы")
 
 
@@ -183,15 +198,80 @@ async def close_db():
 
 # ── Пользователи ──
 
-async def ensure_user(user_id: int, username: str = None, first_name: str = None):
+async def ensure_user(user_id: int, username: str = None, first_name: str = None) -> bool:
+    """Создать пользователя, если его ещё нет. Возвращает True, если пользователь новый."""
     async with pool.acquire() as conn:
-        await conn.execute("""
+        row = await conn.fetchrow("""
             INSERT INTO users (user_id, username, first_name)
             VALUES ($1, $2, $3)
             ON CONFLICT (user_id) DO UPDATE
             SET username = COALESCE($2, users.username),
                 first_name = COALESCE($3, users.first_name)
+            RETURNING (xmax = 0) AS is_new
         """, user_id, username, first_name)
+        return bool(row["is_new"]) if row else False
+
+
+async def apply_start_payload(user_id: int, payload: str) -> Optional[int]:
+    """
+    Обработать deep-link payload при первом /start: "ref<user_id>" — реферал
+    (начисляет бонус обеим сторонам, возвращает user_id пригласившего),
+    иначе — метка источника (сохраняется в signup_source).
+    """
+    payload = (payload or "").strip()
+    if not payload:
+        return None
+
+    if payload.startswith("ref") and payload[3:].isdigit():
+        referrer_id = int(payload[3:])
+        if referrer_id == user_id:
+            return None
+        async with pool.acquire() as conn:
+            referrer_exists = await conn.fetchval("SELECT 1 FROM users WHERE user_id = $1", referrer_id)
+            if not referrer_exists:
+                return None
+            updated = await conn.fetchval("""
+                UPDATE users SET referred_by = $1
+                WHERE user_id = $2 AND referred_by IS NULL
+                RETURNING user_id
+            """, referrer_id, user_id)
+            if not updated:
+                return None
+        await add_free_minutes(referrer_id, REFERRAL_BONUS_MINUTES)
+        await add_free_minutes(user_id, REFERRAL_BONUS_MINUTES)
+        return referrer_id
+
+    source = re.sub(r"[^A-Za-z0-9_-]", "", payload)[:40]
+    if source:
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                UPDATE users SET signup_source = $1
+                WHERE user_id = $2 AND (signup_source IS NULL OR signup_source = '')
+            """, source, user_id)
+    return None
+
+
+async def get_referral_stats(user_id: int) -> dict:
+    async with pool.acquire() as conn:
+        count = await conn.fetchval("SELECT COUNT(*) FROM users WHERE referred_by = $1", user_id)
+        return {"invited_count": count or 0, "bonus_minutes": REFERRAL_BONUS_MINUTES}
+
+
+async def get_source_breakdown(limit: int = 20) -> dict:
+    """Разбивка новых пользователей по меткам источника (для админского /sources)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT COALESCE(NULLIF(signup_source, ''), '(без метки)') AS source, COUNT(*) AS count
+            FROM users
+            GROUP BY source
+            ORDER BY count DESC
+            LIMIT $1
+        """, limit)
+        referred_total = await conn.fetchval("SELECT COUNT(*) FROM users WHERE referred_by IS NOT NULL")
+        return {
+            "sources": [dict(r) for r in rows],
+            "referred_total": referred_total or 0,
+        }
 
 
 async def get_user(user_id: int) -> Optional[dict]:

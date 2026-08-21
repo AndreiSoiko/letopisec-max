@@ -15,6 +15,7 @@ class BotUser(models.Model):
     star_balance = models.IntegerField(default=0)
     free_minutes = models.FloatField(default=0)
     email = models.TextField(blank=True, null=True)
+    signup_source = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
