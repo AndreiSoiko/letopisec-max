@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Летописец — распознавание речи из аудио и видео{% endblock %}
+{% block title %}Летописец — расшифровка аудио в текст и протокол совещания автоматически{% endblock %}
+{% block meta_description %}Расшифровка аудио и видео в текст с помощью ИИ. Автоматический протокол совещания с решениями и задачами, конспект интервью, тезисы — прямо в мессенджере MAX.{% endblock %}
 
 {% block content %}
 <style>
@@ -17,6 +18,14 @@
     font-size: .7rem; font-weight: 700; letter-spacing: .03em;
     padding: 3px 34px; transform: rotate(45deg);
   }
+  .usecase-icon {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: var(--grad); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; flex: none;
+  }
+  .usecase-card ul { padding-left: 1.1rem; }
+  .usecase-card li { margin-bottom: .3rem; }
 </style>
 
 <div class="p-4 p-md-5 rounded-4 mb-4" style="background: var(--grad);">
@@ -102,6 +111,52 @@
       <i class="bi bi-speedometer2 fs-4 text-primary"></i>
       <div class="fw-bold mt-2 mb-1">Личный кабинет</div>
       <div class="text-muted small">Баланс, история заданий, управление API-ключами</div>
+    </div>
+  </div>
+</div>
+
+<h2 class="h4 fw-bold mb-3">Кому подходит</h2>
+<div class="row g-3 mb-5">
+  <div class="col-lg-6">
+    <div class="card usecase-card p-4 h-100">
+      <div class="d-flex gap-3 mb-3">
+        <div class="usecase-icon"><i class="bi bi-clipboard-check"></i></div>
+        <div>
+          <div class="fw-bold fs-5">Секретарям и проджект-менеджерам</div>
+          <div class="text-muted small">Протокол совещания — автоматически</div>
+        </div>
+      </div>
+      <p class="text-muted mb-3">
+        Планёрки, статусы, звонки с клиентами — каждую неделю нужно записывать решения
+        и задачи вручную. Отправьте запись боту — на выходе протокол с участниками,
+        принятыми решениями и задачами по ответственным и срокам, готовый к рассылке.
+      </p>
+      <ul class="text-muted small mb-0">
+        <li>Протокол: участники, повестка, решения, задачи со сроками</li>
+        <li>Работает с записями Zoom, Teams, Skype, Яндекс.Телемост</li>
+        <li>Подписка окупается уже на второй-третьей встрече</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card usecase-card p-4 h-100">
+      <div class="d-flex gap-3 mb-3">
+        <div class="usecase-icon"><i class="bi bi-person-lines-fill"></i></div>
+        <div>
+          <div class="fw-bold fs-5">HR и рекрутёрам</div>
+          <div class="text-muted small">Конспект интервью без ручной работы</div>
+        </div>
+      </div>
+      <p class="text-muted mb-3">
+        5–15 собеседований в неделю — и на каждое нужен конспект для команды и заказчика.
+        Летописец расшифровывает интервью, исправляет ошибки распознавания и выделяет
+        ключевые тезисы кандидата сразу после звонка.
+      </p>
+      <ul class="text-muted small mb-0">
+        <li>Ключевые тезисы: что рассказал кандидат, по пунктам</li>
+        <li>Поддержка 6 языков — если интервью не на русском</li>
+        <li>Обратная связь команде — быстрее, а не через день</li>
+      </ul>
     </div>
   </div>
 </div>
