@@ -77,7 +77,7 @@ def vk_login(request):
     request.session["oauth_state"] = state
     redirect_uri = request.build_absolute_uri("/accounts/vk/callback/")
     url = (
-        f"https://oauth.vk.com/authorize"
+        f"https://oauth.vk.ru/authorize"
         f"?client_id={settings.VK_APP_ID}"
         f"&redirect_uri={redirect_uri}"
         f"&scope=email"
@@ -99,7 +99,7 @@ def vk_callback(request):
 
     redirect_uri = request.build_absolute_uri("/accounts/vk/callback/")
     try:
-        resp = req.get("https://oauth.vk.com/access_token", params={
+        resp = req.get("https://oauth.vk.ru/access_token", params={
             "client_id": settings.VK_APP_ID,
             "client_secret": settings.VK_APP_SECRET,
             "redirect_uri": redirect_uri,
