@@ -8,6 +8,8 @@ from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+from bot.config import MAX_BOT_LINK
+
 logger = logging.getLogger(__name__)
 
 
@@ -136,6 +138,12 @@ def build_docx(
 
     p = doc.add_paragraph()
     run = p.add_run(footer)
+    run.font.size = Pt(8)
+    run.font.italic = True
+    run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
+    p = doc.add_paragraph()
+    run = p.add_run(f"Документ составлен ботом «Летописец» — {MAX_BOT_LINK}")
     run.font.size = Pt(8)
     run.font.italic = True
     run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)

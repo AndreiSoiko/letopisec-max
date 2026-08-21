@@ -20,6 +20,7 @@ from bot.config import (
     THESES_PRICE_RUB, PROTOCOL_PRICE_RUB,
     MAX_FILE_SIZE_BYTES,
     YANDEX_S3_BUCKET, YANDEX_S3_KEY_ID, YANDEX_S3_SECRET_KEY,
+    REFERRAL_BONUS_MINUTES,
 )
 from bot.utils.helpers import (
     get_temp_path, cleanup_user_files, format_duration,
@@ -175,6 +176,24 @@ def _build_extra_translang_keyboard() -> InlineKeyboardBuilder:
     kb.add(CallbackButton(text="◀️ Назад", payload="extra:back_ops"))
     kb.add(CallbackButton(text="❌ Завершить", payload="extra:finish"))
     return kb
+
+
+def _build_share_kb() -> InlineKeyboardBuilder:
+    kb = InlineKeyboardBuilder()
+    kb.add(CallbackButton(text="🤝 Поделиться с коллегой", payload="menu:invite"))
+    return kb
+
+
+async def _send_share_nudge(bot: Bot, chat_id: int):
+    """Ненавязчивое предложение пригласить коллегу сразу после готового документа."""
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"Понравился результат? Пригласите коллегу — оба получите по {REFERRAL_BONUS_MINUTES:.0f} мин бесплатно.",
+            attachments=[_build_share_kb().as_markup()],
+        )
+    except Exception:
+        logger.warning("Не удалось отправить предложение поделиться (chat_id=%s)", chat_id)
 
 
 def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
@@ -774,6 +793,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                     logger.error(f"Отправка файла: {e}")
                     await send(f"⚠️ Не удалось отправить файл: {str(e)[:100]}")
                 docx_path.unlink(missing_ok=True)
+                await _send_share_nudge(bot, chat_id)
 
                 result["extra_count"] += 1
                 extra_count = result["extra_count"]
@@ -847,6 +867,7 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
                 await send(f"⚠️ Не удалось отправить файл: {str(e)[:100]}")
 
             docx_path.unlink(missing_ok=True)
+            await _send_share_nudge(bot, chat_id)
 
             result["extra_count"] += 1
             extra_count = result["extra_count"]
@@ -1139,6 +1160,8 @@ def register_transcribe_handlers(dp: Dispatcher, bot: Bot):
             except Exception as e:
                 logger.error(f"Отправка файла: {e}")
                 await send(f"⚠️ Не удалось отправить файл: {str(e)[:100]}")
+
+            await _send_share_nudge(bot, chat_id)
 
             # 10. Учёт
             if is_trial:
