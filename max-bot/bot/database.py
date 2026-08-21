@@ -684,7 +684,7 @@ async def link_max_account(code: str, max_user_id: int) -> bool:
     """Привязать MAX user_id к web-аккаунту по одноразовому коду."""
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
-            SELECT id, bot_user_id FROM web_accounts_webuser
+            SELECT id, bot_user_id FROM accounts_webuser
             WHERE max_link_code = $1
               AND max_link_code_expires > NOW()
               AND is_max_linked = FALSE
@@ -713,7 +713,7 @@ async def link_max_account(code: str, max_user_id: int) -> bool:
 
             # Обновить web_user
             await conn.execute("""
-                UPDATE web_accounts_webuser
+                UPDATE accounts_webuser
                 SET bot_user_id = $1, is_max_linked = TRUE, max_link_code = '', max_link_code_expires = NULL
                 WHERE id = $2
             """, max_user_id, web_user_id)

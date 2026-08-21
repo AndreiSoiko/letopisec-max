@@ -54,7 +54,7 @@ cd /home/letopisec-max/web
 ```
 
 > Примечание: таблицы `users`, `api_keys`, `api_jobs` уже созданы ботом — Django их не трогает (managed=False).
-> Django создаст только `web_accounts_webuser`, `web_tinkoff_orders` и стандартные таблицы auth.
+> Django создаст только `accounts_webuser`, `web_tinkoff_orders` и стандартные таблицы auth.
 
 ## 5. Настройка systemd
 
@@ -98,7 +98,7 @@ sudo certbot --nginx -d yourdomain.ru -d www.yourdomain.ru
 ## 9. Настройка привязки MAX-аккаунта
 
 Для работы команды `/link` в боте:
-- Бот должен иметь доступ к таблице `web_accounts_webuser` (это та же БД)
+- Бот должен иметь доступ к таблице `accounts_webuser` (это та же БД)
 - Никакой дополнительной настройки не нужно — бот читает/пишет напрямую в эту таблицу
 
 ## Структура проекта
