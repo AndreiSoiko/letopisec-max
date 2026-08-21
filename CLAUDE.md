@@ -116,6 +116,11 @@ cd /opt/letopisec && git pull
 sudo systemctl restart letopisec-web
 ```
 
+## Growth
+
+Promotion plan, unit economics, prioritized segments/channels, and a running status of what's
+already built vs. still manual — see `GROWTH_PLAN.md` at the repo root.
+
 ## Notes
 
 - All code is async (`asyncio`). The entire pipeline is async from handlers through services to DB.
