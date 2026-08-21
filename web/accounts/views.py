@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import secrets
 import requests as req
 from django.conf import settings
@@ -67,23 +69,31 @@ def profile(request):
     return render(request, "accounts/profile.html")
 
 
-# ── VK OAuth ──
+# ── VK OAuth (VK ID, OAuth 2.1 + PKCE — старый oauth.vk.com/vk.ru отключён VK 30.09.2025) ──
 
 def vk_login(request):
     if not settings.VK_APP_ID:
         messages.error(request, "VK OAuth не настроен. Укажите VK_APP_ID в .env")
         return redirect("/accounts/login/")
     state = secrets.token_urlsafe(16)
+    code_verifier = secrets.token_urlsafe(64)
+    device_id = secrets.token_hex(16)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).decode().rstrip("=")
     request.session["oauth_state"] = state
+    request.session["vk_code_verifier"] = code_verifier
+    request.session["vk_device_id"] = device_id
     redirect_uri = request.build_absolute_uri("/accounts/vk/callback/")
     url = (
-        f"https://oauth.vk.ru/authorize"
-        f"?client_id={settings.VK_APP_ID}"
+        f"https://id.vk.ru/authorize"
+        f"?response_type=code"
+        f"&client_id={settings.VK_APP_ID}"
         f"&redirect_uri={redirect_uri}"
         f"&scope=email"
-        f"&response_type=code"
         f"&state={state}"
-        f"&v=5.131"
+        f"&code_challenge={code_challenge}"
+        f"&code_challenge_method=S256"
     )
     return redirect(url)
 
@@ -97,21 +107,38 @@ def vk_callback(request):
         messages.error(request, "VK не вернул код авторизации.")
         return redirect("/accounts/login/")
 
+    code_verifier = request.session.pop("vk_code_verifier", None)
+    device_id = request.GET.get("device_id") or request.session.pop("vk_device_id", None)
+    if not code_verifier:
+        messages.error(request, "Время авторизации VK истекло, попробуйте снова.")
+        return redirect("/accounts/login/")
+
     redirect_uri = request.build_absolute_uri("/accounts/vk/callback/")
     try:
-        resp = req.get("https://oauth.vk.ru/access_token", params={
+        resp = req.post("https://id.vk.ru/oauth2/auth", data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "code_verifier": code_verifier,
             "client_id": settings.VK_APP_ID,
             "client_secret": settings.VK_APP_SECRET,
+            "device_id": device_id,
             "redirect_uri": redirect_uri,
-            "code": code,
+            "state": request.GET.get("state"),
         }, timeout=10)
         data = resp.json()
+        access_token = data["access_token"]
+
+        info_resp = req.post("https://id.vk.ru/oauth2/user_info", data={
+            "client_id": settings.VK_APP_ID,
+            "access_token": access_token,
+        }, timeout=10)
+        user_info = info_resp.json().get("user", {})
     except Exception:
         messages.error(request, "Ошибка при обмене кода VK на токен.")
         return redirect("/accounts/login/")
 
-    vk_id = data.get("user_id")
-    email = data.get("email", "")
+    vk_id = user_info.get("user_id")
+    email = user_info.get("email") or ""
     if not vk_id:
         messages.error(request, "VK не вернул user_id.")
         return redirect("/accounts/login/")

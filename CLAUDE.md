@@ -90,6 +90,32 @@ User → `handlers/payment.py` → `services/tinkoff.py` (creates T-Bank order) 
 - **boto3** — Yandex S3 (async STT uploads)
 - **ffmpeg** — Audio/video processing (system dependency)
 
+## Production Deployment (VM)
+
+The bot and web app run directly on a Yandex Cloud VM (no Docker in prod). Claude has no SSH access to this VM from the sandbox — any command here must be run by the user.
+
+- Host: `81.26.183.201`, user `letopisec-max`, project at `/opt/letopisec` (bot in `max-bot/`, web in `web/`)
+- systemd services: `letopisec` (bot), `letopisec-web` (Django/gunicorn, web/deploy/letopisec-web.service), `letopisec-healthcheck.service`, `letopisec-postgres-backup.service`
+- Web app venv on the VM: `/home/letopisec-max/web-venv`
+- DB: managed PostgreSQL cluster in Yandex Cloud (not a local container)
+
+**Whenever giving the user commands to run on this VM, always format them as a single bash code block:**
+- Steps numbered as shell comments (`# 1. ...`, `# 2. ...`) placed *above* the command they describe, not after it
+- Each comment explains what the command does and why, in plain language — don't assume familiarity with Django/systemd internals
+- No references to earlier chat context ("as discussed above", "the command from step 1") — the block must be self-contained and copy-pasteable on its own
+
+Example:
+```bash
+# 1. подключение к серверу по SSH
+ssh letopisec-max@81.26.183.201
+
+# 2. переход в папку проекта и скачивание последних изменений кода
+cd /opt/letopisec && git pull
+
+# 3. перезапуск процесса сайта, чтобы подхватились изменения
+sudo systemctl restart letopisec-web
+```
+
 ## Notes
 
 - All code is async (`asyncio`). The entire pipeline is async from handlers through services to DB.

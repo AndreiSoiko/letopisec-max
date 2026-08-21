@@ -21,15 +21,18 @@ sudo mkdir -p /var/log/letopisec-web
 sudo chown letopisec-max:letopisec-max /var/log/letopisec-web
 ```
 
-## 2. Регистрация VK OAuth приложения
+## 2. Регистрация VK OAuth приложения (VK ID, id.vk.ru)
 
-1. Зайдите на https://dev.vk.com/
-2. «Мои приложения» → «Создать приложение»
-3. Тип: **Веб-сайт**
-4. Базовый домен: `yourdomain.ru`
-5. Доверенный redirect URI: `https://yourdomain.ru/accounts/vk/callback/`
-6. Скопируйте **ID приложения** → `VK_APP_ID` в .env
-7. Скопируйте **Защищённый ключ** → `VK_APP_SECRET` в .env
+Старый протокол `oauth.vk.com`/`oauth.vk.ru` с `client_secret` VK отключил 30.09.2025.
+Сейчас работает только VK ID (OAuth 2.1 + PKCE), приложение регистрируется в отдельном
+кабинете — старые приложения из dev.vk.com туда автоматически не переносятся.
+
+1. Зайдите на https://id.vk.ru/apps (кабинет VK ID, не dev.vk.com)
+2. Создайте приложение, тип — **Веб-сайт**
+3. Базовый домен: `yourdomain.ru`
+4. Доверенный redirect URI (именно в настройках VK ID, а не старого dev.vk.com приложения, даже если ID совпадает): `https://yourdomain.ru/accounts/vk/callback/`
+5. Скопируйте **ID приложения** → `VK_APP_ID` в .env
+6. Скопируйте **Защищённый ключ** → `VK_APP_SECRET` в .env
 
 ## 3. Регистрация Yandex OAuth приложения
 
